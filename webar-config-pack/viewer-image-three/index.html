@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/>
-  <title>WebAR – Image (MindAR + Three)</title>
+  <title>WebAR – Image (MindAR + Three, minimal)</title>
   <style>
     :root{color-scheme:dark}
     html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
@@ -14,9 +14,7 @@
   </style>
 </head>
 <body>
-  <div id="ui">
-    <button id="start" onclick="window.startAR && window.startAR()">🚀 AR starten</button>
-  </div>
+  <div id="ui"><button id="start" onclick="window.startAR && window.startAR()">🚀 AR starten</button></div>
   <div id="log"></div>
   <div id="target">
     <div style="color:#bbb;font:12px/1.2 system-ui;margin-bottom:4px">Target Preview:</div>
@@ -25,7 +23,6 @@
 
   <script type="module">
     import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
-    import { GLTFLoader } from "https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js";
     import { MindARThree } from "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js";
 
     const log = (m)=>{ const el=document.getElementById('log'); el.textContent += (el.textContent?'\n':'') + m; };
@@ -41,9 +38,9 @@
             preview: "https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png"
           } ]},
           nodes: [{
-            id:"model",
-            asset:"https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/softmind/scene.gltf",
-            transform:{ position:[0,0,0.1], rotation:[0,0,0], scale:[0.005,0.005,0.005] }
+            id:"cube",
+            asset:null,
+            transform:{ position:[0,0,0.1], rotation:[0,0,0], scale:[0.1,0.1,0.1] }
           }]
         };
       }
@@ -69,24 +66,23 @@
         const {renderer, scene, camera} = mindar;
         renderer.outputColorSpace = THREE.SRGBColorSpace;
         renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+
         scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1));
 
         const anchor = mindar.addAnchor(0);
-        const loader = new GLTFLoader();
-        for(const n of (cfg.nodes||[])){
-          await new Promise((resolve,reject)=>{
-            loader.load(n.asset, (gltf)=>{
-              const o = gltf.scene || gltf.scenes?.[0];
-              const p=n.transform?.position||[0,0,0], r=n.transform?.rotation||[0,0,0], s=n.transform?.scale||[1,1,1];
-              o.position.set(...p); o.rotation.set(...r); o.scale.set(...s);
-              anchor.group.add(o); resolve();
-            }, undefined, reject);
-          });
-        }
+
+        // ---- statt GLB: einfacher Testwürfel (keine Addons nötig)
+        const geom = new THREE.BoxGeometry(1,1,1);
+        const mat = new THREE.MeshStandardMaterial({metalness:0.2, roughness:0.6});
+        const cube = new THREE.Mesh(geom, mat);
+        const n = (cfg.nodes||[])[0] || {};
+        const p=n?.transform?.position||[0,0,0.1], r=n?.transform?.rotation||[0,0,0], s=n?.transform?.scale||[0.1,0.1,0.1];
+        cube.position.set(...p); cube.rotation.set(...r); cube.scale.set(...s);
+        anchor.group.add(cube);
+        // ----
 
         await mindar.start();
-        const v = mindar.video;
-        if(v) log(`📹 Video ${v.videoWidth}x${v.videoHeight}`);
+        const v = mindar.video; if(v) log(`📹 Video ${v.videoWidth}x${v.videoHeight}`);
         log("✅ MindAR gestartet");
         renderer.setAnimationLoop(()=> renderer.render(scene, camera));
       }catch(e){
