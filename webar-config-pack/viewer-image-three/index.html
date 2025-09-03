@@ -11,13 +11,14 @@
     #start{background:#111;border:1px solid #333;color:#fff;padding:10px 14px;border-radius:12px}
     #log{position:fixed;right:10px;bottom:10px;max-width:70vw;background:rgba(0,0,0,.6);color:#fff;padding:8px 10px;border-radius:10px;font:12px/1.3 system-ui;white-space:pre-wrap;z-index:3}
     #target{position:fixed;right:10px;top:10px;z-index:3;background:#111;border:1px solid #222;border-radius:10px;padding:6px;display:none}
+    /* Video hinter das Canvas, Canvas transparent */
     video#cameraFeed{position:fixed;inset:0;object-fit:cover;width:100vw;height:100vh;z-index:0}
     canvas.mindar-canvas{position:fixed;inset:0;z-index:1}
   </style>
 
-  <!-- THREE r139 (kompatibel mit MindAR 1.1.x) -->
+  <!-- Kompatible Three.js Version -->
   <script src="https://unpkg.com/three@0.139.2/build/three.min.js"></script>
-  <!-- MindAR UMD (liefert window.MINDAR.IMAGE.*) -->
+  <!-- MindAR UMD, liefert window.MINDAR.IMAGE.* -->
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.1.5/dist/mindar-image-three.prod.js"></script>
 </head>
 <body>
@@ -54,27 +55,21 @@
 
         const cfg = await loadConfig();
         const t = cfg.anchor?.targets?.[0]; if(!t?.src) throw new Error('anchor.targets[0].src (.mind) fehlt');
-
         if(t.preview){ document.getElementById('target').style.display='block'; document.getElementById('targetImg').src=t.preview; }
 
+        const THREE = window.THREE;
         const mindar = new MindARThree({ container: document.body, imageTargetSrc: t.src, uiLoading:true, uiError:true, maxTrack:1 });
         const { renderer, scene, camera } = mindar;
 
-        // Canvas sichtbar über Video legen
+        // Transparentes Canvas, liegt über dem Video
         renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
-        renderer.setSize(innerWidth, innerHeight);
-        renderer.setClearColor(0x000000, 0);        // <— transparent
+        renderer.setClearColor(0x000000, 0);
         renderer.domElement.classList.add('mindar-canvas');
 
-        // Kamera-Video explizit einblenden (Debug + zuverlässiger BG)
-        const v = mindar.video; v.id = 'cameraFeed'; v.playsInline = true; v.muted = true;
-        document.body.prepend(v); // hinter das Canvas
-
-        // Licht + Anker + Testwürfel
-        const THREE = window.THREE;
         scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1));
         const anchor = mindar.addAnchor(0);
 
+        // Testwürfel
         const cube = new THREE.Mesh(
           new THREE.BoxGeometry(1,1,1),
           new THREE.MeshStandardMaterial({metalness:0.1, roughness:0.6})
@@ -86,13 +81,19 @@
         cube.position.set(p[0],p[1],p[2]); cube.rotation.set(r[0],r[1],r[2]); cube.scale.set(s[0],s[1],s[2]);
         anchor.group.add(cube);
 
+        // --- WICHTIG: erst NACH dem Start auf das Video zugreifen ---
         await mindar.start();
-        log(`📹 Video ${v.videoWidth}x${v.videoHeight}`);
+        const v = mindar.video;
+        if(v){
+          v.id = 'cameraFeed';
+          v.playsInline = true;
+          v.muted = true;
+          document.body.prepend(v); // hinter das Canvas legen
+          log(`📹 Video ${v.videoWidth}x${v.videoHeight}`);
+        }
         log('✅ MindAR gestartet');
 
-        // Resize
         addEventListener('resize', ()=>{ renderer.setSize(innerWidth, innerHeight); }, false);
-
         renderer.setAnimationLoop(()=> renderer.render(scene, camera));
       }catch(e){ log('❌ '+(e?.message||e)); }
     };
