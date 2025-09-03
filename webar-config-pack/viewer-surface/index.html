@@ -5,8 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
   <title>WebAR – Surface Placement (Three.js + WebXR)</title>
 
-  <script async src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
+  <script src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
   <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="importmap-shim">
   {
     "imports": {
       "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
@@ -18,7 +26,7 @@
   <style>html,body{margin:0;height:100%;overflow:hidden;background:#000;color:#fff;font-family:system-ui}</style>
 </head>
 <body>
-<script type="module">
+<script type="module-shim">
 import * as THREE from 'three';
 import { ARButton } from 'three/addons/webxr/ARButton.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
