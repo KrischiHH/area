@@ -13,7 +13,9 @@
     #target{position:fixed;right:10px;top:10px;z-index:3;background:#111;border:1px solid #222;border-radius:10px;padding:6px;display:none}
   </style>
 
-  <!-- Wichtig: Die **UMD**–Version aus v1.1.5. Sie liefert window.MINDAR.IMAGE.* -->
+  <!-- 1) Three.js als GLOBAL laden -->
+  <script src="https://unpkg.com/three@0.152.2/build/three.min.js"></script>
+  <!-- 2) MindAR UMD (liefert window.MINDAR.IMAGE.*) -->
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.1.5/dist/mindar-image-three.prod.js"></script>
 </head>
 <body>
@@ -45,16 +47,16 @@
 
     document.getElementById('start').onclick = async ()=>{
       try{
-        const MindARThree = window?.MINDAR?.IMAGE?.MindARThree;
-        if(!MindARThree) throw new Error('MindAR UMD nicht geladen (window.MINDAR.IMAGE fehlt)');
+        if(!window.THREE) throw new Error('Three.js nicht geladen (window.THREE fehlt)');
+        if(!window.MINDAR?.IMAGE?.MindARThree) throw new Error('MindAR UMD nicht geladen (window.MINDAR.IMAGE fehlt)');
 
         const cfg = await loadConfig();
         const t = cfg.anchor?.targets?.[0]; if(!t?.src) throw new Error('anchor.targets[0].src (.mind) fehlt');
 
         if(t.preview){ document.getElementById('target').style.display='block'; document.getElementById('targetImg').src=t.preview; }
 
-        // MindAR stellt THREE bei v1.1.5 global bereit:
-        const THREE = window.THREE;
+        const { THREE } = window;
+        const MindARThree = window.MINDAR.IMAGE.MindARThree;
 
         const mindar = new MindARThree({ container: document.body, imageTargetSrc: t.src, uiLoading:true, uiError:true, maxTrack:1 });
         const { renderer, scene, camera } = mindar;
@@ -64,7 +66,7 @@
 
         const anchor = mindar.addAnchor(0);
 
-        // Testobjekt: Würfel
+        // Testwürfel
         const cube = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({metalness:0.1, roughness:0.6}));
         const n = (cfg.nodes||[])[0] || {};
         const p = n.transform?.position || [0,0,0.1];
