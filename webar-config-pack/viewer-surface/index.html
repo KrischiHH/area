@@ -7,12 +7,16 @@
   <style>
     html,body{margin:0;height:100%;overflow:hidden;background:#000;color:#fff;font-family:system-ui}
     #enter{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);padding:10px 14px;border-radius:12px;background:#111;border:1px solid #333;color:#fff;z-index:2}
+    #note{position:fixed;left:50%;top:10px;transform:translateX(-50%);background:#111;border:1px solid #333;color:#ddd;border-radius:10px;padding:6px 10px;z-index:2;font:12px system-ui}
   </style>
   <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
 </head>
 <body>
 <button id="enter">Enter AR</button>
+<div id="note" style="display:none"></div>
 <script>
+const note=(m)=>{const n=document.getElementById('note'); n.textContent=m; n.style.display='block';};
+
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.xr.enabled = true;
@@ -27,7 +31,7 @@ const ring = new THREE.RingGeometry(0.07, 0.09, 32); ring.rotateX(-Math.PI/2);
 const reticle = new THREE.Mesh(ring, new THREE.MeshBasicMaterial({ transparent:true, opacity:0.85 }));
 reticle.matrixAutoUpdate = false; reticle.visible = false; scene.add(reticle);
 
-// Würfel zum Platzieren
+// Würfel
 const cube = new THREE.Mesh(new THREE.BoxGeometry(0.2,0.2,0.2), new THREE.MeshStandardMaterial({metalness:0.2, roughness:0.6}));
 let cubePlaced = false;
 
@@ -42,12 +46,18 @@ document.getElementById('enter').onclick = async ()=>{
   renderer.xr.setReferenceSpaceType('local');
   await renderer.xr.setSession(session);
 
-  session.addEventListener('select', ()=>{
+  // WICHTIG: Controller 0 empfängt "select" (Tap)
+  const controller = renderer.xr.getController(0);
+  controller.addEventListener('select', ()=>{
     if(reticle.visible){
       if(!cubePlaced){ scene.add(cube); cubePlaced = true; }
       cube.position.setFromMatrixPosition(reticle.matrix);
+    } else {
+      note('Keine Fläche erkannt – bewege das Gerät über eine ebene Fläche.');
+      setTimeout(()=>document.getElementById('note').style.display='none', 2000);
     }
   });
+  scene.add(controller);
 };
 
 renderer.setAnimationLoop((t, frame)=>{
@@ -64,7 +74,8 @@ renderer.setAnimationLoop((t, frame)=>{
       const hits = frame.getHitTestResults(hitTestSource);
       if(hits.length){
         const pose = hits[0].getPose(refSpace);
-        reticle.visible = true; reticle.matrix.fromArray(pose.transform.matrix);
+        reticle.visible = true;
+        reticle.matrix.fromArray(pose.transform.matrix);
       } else {
         reticle.visible = false;
       }
