@@ -7,17 +7,19 @@
   <style>
     :root{color-scheme:dark}
     html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-    #ui{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);z-index:3}
-    #start{background:#111;border:1px solid #333;color:#fff;padding:10px 14px;border-radius:12px}
+    #ui{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);z-index:3;display:flex;gap:8px}
+    button{background:#111;border:1px solid #333;color:#fff;padding:10px 14px;border-radius:12px}
     #log{position:fixed;right:10px;bottom:10px;max-width:70vw;background:rgba(0,0,0,.6);color:#fff;padding:8px 10px;border-radius:10px;font:12px/1.3 system-ui;white-space:pre-wrap;z-index:3}
     #target{position:fixed;right:10px;top:10px;z-index:3;background:#111;border:1px solid #222;border-radius:10px;padding:6px;display:none}
   </style>
-
-  <!-- Nur MindAR UMD 1.1.5 – KEIN zusätzliches three.min.js laden! -->
+  <!-- Nur die MindAR-UMD (liefert window.MINDAR.IMAGE & eigene THREE-Instanz) -->
   <script src="https://unpkg.com/mind-ar@1.1.5/dist/mindar-image-three.prod.js"></script>
 </head>
 <body>
-  <div id="ui"><button id="start">🚀 AR starten</button></div>
+  <div id="ui">
+    <button id="start">🚀 AR starten</button>
+    <button id="retry" style="display:none">🔄 Neu versuchen</button>
+  </div>
   <div id="log"></div>
   <div id="target">
     <div style="color:#bbb;font:12px/1.2 system-ui;margin-bottom:4px">Target Preview:</div>
@@ -26,6 +28,7 @@
 
   <script>
     const log = (m)=>{ const el=document.getElementById('log'); el.textContent += (el.textContent?'\n':'') + m; };
+    let mindar = null;
 
     async function loadConfig(){
       const qs = new URLSearchParams(location.search);
@@ -43,8 +46,11 @@
       return r.json();
     }
 
-    document.getElementById('start').onclick = async ()=>{
+    async function startAR(){
       try{
+        document.getElementById('start').disabled = true;
+        document.getElementById('retry').style.display = 'none';
+
         const M = window.MINDAR?.IMAGE;
         if(!M?.MindARThree) throw new Error('MindAR UMD nicht geladen');
         const { MindARThree, THREE } = M;
@@ -53,13 +59,15 @@
         const t = cfg.anchor?.targets?.[0]; if(!t?.src) throw new Error('anchor.targets[0].src (.mind) fehlt');
         if(t.preview){ target.style.display='block'; targetImg.src=t.preview; }
 
-        const mindar = new MindARThree({
+        // Vorherige Session sauber stoppen (falls vorhanden)
+        if(mindar){ try{ await mindar.stop(); }catch{} mindar = null; }
+
+        mindar = new MindARThree({
           container: document.body, imageTargetSrc: t.src,
           uiLoading:true, uiError:true, maxTrack:1
         });
         const { renderer, scene, camera } = mindar;
 
-        // MindAR rendert das Kamera-Video selbst in denselben Renderer (keine zweite Video-Ebene nötig)
         renderer.setPixelRatio(Math.min(devicePixelRatio||1, 2));
         scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1));
 
@@ -75,13 +83,30 @@
         cube.position.set(...p); cube.rotation.set(...r); cube.scale.set(...s);
         anchor.group.add(cube);
 
-        await mindar.start();
+        await mindar.start();             // <- hier holt MindAR die Kamera
         const v = mindar.video; if(v) log(`📹 ${v.videoWidth}x${v.videoHeight}`);
         log('✅ MindAR gestartet');
-
         renderer.setAnimationLoop(()=> renderer.render(scene, camera));
-      }catch(e){ log('❌ '+(e?.message||e)); }
-    };
+      }catch(e){
+        log('❌ '+(e?.name||'')+' '+(e?.message||e));
+        if(String(e).includes('NotReadableError')){
+          log('ℹ️ Kamera ist belegt (anderer Tab/App). Schließe den Surface-Viewer/andere Kamera-Apps und tippe „Neu versuchen“.');
+          document.getElementById('retry').style.display = 'inline-block';
+        }
+        document.getElementById('start').disabled = false;
+      }
+    }
+
+    document.getElementById('start').onclick = startAR;
+    document.getElementById('retry').onclick = startAR;
+
+    // Sicherheitsnetz: Wenn die Seite versteckt wird, AR stoppen (gibt Kamera frei)
+    document.addEventListener('visibilitychange', async ()=>{
+      if(document.hidden && mindar){
+        try{ await mindar.stop(); }catch{}
+      }
+    });
+    window.addEventListener('pagehide', async ()=>{ if(mindar){ try{ await mindar.stop(); }catch{} }});
   </script>
 </body>
 </html>
