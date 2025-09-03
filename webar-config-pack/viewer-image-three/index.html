@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/>
-  <title>WebAR – Image (MindAR UMD, single THREE)</title>
+  <title>WebAR – Image (MindAR UMD + ONE Three)</title>
   <style>
     :root{color-scheme:dark}
     html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
@@ -13,8 +13,10 @@
     #target{position:fixed;right:10px;top:10px;z-index:3;background:#111;border:1px solid #222;border-radius:10px;padding:6px;display:none}
   </style>
 
-  <!-- Nur MindAR UMD laden (bringt eigene THREE mit) -->
-  <script src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/dist/mindar-image-three.prod.js"></script>
+  <!-- Genau EINE Three-Version (r139, kompatibel zu MindAR 1.1.x) -->
+  <script src="https://unpkg.com/three@0.139.2/build/three.min.js"></script>
+  <!-- MindAR UMD **1.1.5** (stellt window.MINDAR.IMAGE.* bereit; nutzt die globale THREE) -->
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.1.5/dist/mindar-image-three.prod.js"></script>
 </head>
 <body>
   <div id="ui"><button id="start">🚀 AR starten</button></div>
@@ -45,21 +47,30 @@
 
     document.getElementById('start').onclick = async ()=>{
       try{
-        const MindARThree = window?.MINDAR?.IMAGE?.MindARThree;
-        if(!MindARThree) throw new Error('MindAR UMD nicht geladen');
+        if(!window.MINDAR || !window.MINDAR.IMAGE || !window.MINDAR.IMAGE.MindARThree){
+          throw new Error('MindAR UMD nicht geladen (prüfe Script-URL/Ad-Blocker)');
+        }
 
         const cfg = await loadConfig();
-        const t = cfg.anchor?.targets?.[0]; if(!t?.src) throw new Error('anchor.targets[0].src (.mind) fehlt');
-        if(t.preview){ document.getElementById('target').style.display='block'; document.getElementById('targetImg').src=t.preview; }
+        const t = cfg.anchor?.targets?.[0];
+        if(!t?.src) throw new Error('anchor.targets[0].src (.mind) fehlt');
 
-        // *** WICHTIG: THREE aus MindAR verwenden ***
-        const THREE = window.MINDAR?.IMAGE?.THREE || window.THREE;
+        if(t.preview){
+          document.getElementById('target').style.display='block';
+          document.getElementById('targetImg').src = t.preview;
+        }
 
-        const mindar = new MindARThree({ container: document.body, imageTargetSrc: t.src, uiLoading:true, uiError:true, maxTrack:1 });
+        const THREE = window.THREE;                         // dieselbe Instanz wie MindAR nutzt
+        const MindARThree = window.MINDAR.IMAGE.MindARThree;
+
+        const mindar = new MindARThree({
+          container: document.body,
+          imageTargetSrc: t.src,
+          uiLoading: true, uiError: true, maxTrack: 1
+        });
         const { renderer, scene, camera } = mindar;
 
-        // Canvas normal (MindAR rendert Kamera-Feed im selben Renderer)
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+        renderer.setPixelRatio(Math.min(devicePixelRatio||1, 2));
         scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1));
 
         const anchor = mindar.addAnchor(0);
