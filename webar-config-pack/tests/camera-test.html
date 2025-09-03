@@ -1,0 +1,18 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Camera Test</title>
+<style>body{margin:0;background:#000;color:#fff;font-family:system-ui} video{width:100vw;height:100vh;object-fit:cover}</style>
+<button id="go" style="position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2">🎥 Kamera starten</button>
+<pre id="log" style="position:fixed;left:10px;bottom:10px;z-index:2;background:rgba(0,0,0,.6);padding:8px;border-radius:8px"></pre>
+<video id="v" playsinline autoplay muted></video>
+<script>
+const v = document.getElementById('v'), log = (m)=>document.getElementById('log').textContent += m + "\n";
+document.getElementById('go').onclick = async ()=>{
+  try{
+    const s = await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}, audio:false});
+    v.srcObject = s; log('✅ Kamera läuft');
+    document.getElementById('go').style.display='none';
+  }catch(e){ log('❌ '+e.name+': '+e.message); }
+};
+</script>

@@ -1,0 +1,36 @@
+{
+  "name": "Demo Image",
+  "anchor": {
+    "type": "image",
+    "targets": [
+      {
+        "src": "https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind",
+        "preview": "https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png"
+      }
+    ]
+  },
+  "nodes": [
+    {
+      "id": "model",
+      "asset": "https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/softmind/scene.gltf",
+      "transform": {
+        "position": [
+          0,
+          0,
+          0.1
+        ],
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "scale": [
+          0.005,
+          0.005,
+          0.005
+        ]
+      },
+      "behaviors": []
+    }
+  ]
+}

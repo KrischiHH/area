@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+  <title>WebAR – Surface Placement (Three.js + WebXR, config-enabled)</title>
+  <style>html,body{margin:0;height:100%;overflow:hidden;background:#000;color:#fff;font-family:system-ui}</style>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { ARButton } from 'https://unpkg.com/three@0.160.0/examples/jsm/webxr/ARButton.js';
+import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
+
+async function loadConfig(){
+  const p = new URLSearchParams(location.search);
+  const url = p.get('project');
+  if(!url){
+    // default demo
+    return {
+      name: "Demo Surface",
+      anchor: { type: "surface" },
+      nodes: [{
+        id:"box",
+        asset:"https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/softmind/scene.gltf",
+        transform:{ position:[0,0,0], rotation:[0,0,0], scale:[0.01,0.01,0.01] }
+      }]
+    };
+  }
+  const res = await fetch(url, {cache:'no-store'});
+  if(!res.ok) throw new Error('Config laden fehlgeschlagen: '+res.status);
+  return await res.json();
+}
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.xr.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera();
+const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1); scene.add(hemi);
+
+// Reticle
+const ring = new THREE.RingGeometry(0.07, 0.09, 32).rotateX(-Math.PI/2);
+const reticle = new THREE.Mesh(ring, new THREE.MeshBasicMaterial({ transparent:true, opacity:0.85 }));
+reticle.matrixAutoUpdate = false; reticle.visible = false; scene.add(reticle);
+
+let hitTestSource = null, hitTestSourceRequested = false;
+let config = await loadConfig();
+
+const loader = new GLTFLoader();
+let modelRoot = null;
+async function ensureModel(){
+  if(modelRoot) return modelRoot;
+  const n = (config.nodes||[])[0];
+  if(!n) return null;
+  return new Promise((resolve,reject)=>{
+    loader.load(n.asset, (gltf)=>{
+      modelRoot = gltf.scene || gltf.scenes?.[0];
+      const p = n.transform?.position || [0,0,0];
+      const r = n.transform?.rotation || [0,0,0];
+      const s = n.transform?.scale    || [1,1,1];
+      modelRoot.position.set(p[0],p[1],p[2]);
+      modelRoot.rotation.set(r[0],r[1],r[2]);
+      modelRoot.scale.set(s[0],s[1],s[2]);
+      resolve(modelRoot);
+    }, undefined, (e)=>reject(e));
+  });
+}
+
+function placeAtMatrix(matrix){
+  ensureModel().then((m)=>{
+    if(!m) return;
+    if(!scene.children.includes(m)) scene.add(m);
+    m.position.setFromMatrixPosition(matrix);
+  });
+}
+
+function onSessionStart(session){
+  renderer.xr.setReferenceSpaceType('local');
+  session.addEventListener('select', ()=>{ if(reticle.visible){ placeAtMatrix(reticle.matrix); } });
+}
+
+const supported = navigator.xr ? await navigator.xr.isSessionSupported('immersive-ar') : false;
+if(!supported){
+  const note = document.createElement('div');
+  note.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:#111;padding:14px 18px;border-radius:12px;color:#ddd;text-align:center;max-width:90%';
+  note.innerHTML = 'AR nicht verfügbar (vermutlich iOS Safari ohne WebXR).<br>Bitte auf Android Chrome/Samsung Internet testen.';
+  document.body.appendChild(note);
+}
+
+const btn = ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] });
+document.body.appendChild(btn);
+renderer.xr.addEventListener('sessionstart', onSessionStart);
+
+renderer.setAnimationLoop((t, frame)=>{
+  const session = renderer.xr.getSession();
+  const refSpace = renderer.xr.getReferenceSpace();
+  if(frame && session){
+    if(!hitTestSourceRequested){
+      session.requestReferenceSpace('viewer').then((viewerSpace)=>{
+        session.requestHitTestSource({ space: viewerSpace }).then((s)=> hitTestSource = s);
+      });
+      hitTestSourceRequested = true;
+    }
+    if(hitTestSource){
+      const hits = frame.getHitTestResults(hitTestSource);
+      if(hits.length){
+        const pose = hits[0].getPose(refSpace);
+        reticle.visible = true;
+        reticle.matrix.fromArray(pose.transform.matrix);
+      }else{
+        reticle.visible = false;
+      }
+    }
+  }
+  renderer.render(scene, camera);
+});
+
+window.addEventListener('resize', ()=> renderer.setSize(innerWidth, innerHeight));
+</script>
+</body>
+</html>

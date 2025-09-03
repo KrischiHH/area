@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"/>
+  <title>WebAR Editor-Lite</title>
+  <style>
+    :root{color-scheme:dark}
+    html,body{margin:0;height:100%;background:#0b0b0b;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overflow:hidden}
+    #ui{position:fixed;top:10px;left:10px;right:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;z-index:2}
+    .card{background:#111;border:1px solid #222;border-radius:12px;padding:8px 10px;display:flex;gap:8px;align-items:center}
+    button,input,select{background:#1a1a1a;color:#eee;border:1px solid #333;border-radius:8px;padding:6px 10px}
+    button:hover{background:#242424}
+    .sep{width:1px;height:26px;background:#2a2a2a;margin:0 6px}
+    #canvas{position:fixed;inset:0}
+    #hint{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);background:#111;border:1px solid #222;border-radius:12px;padding:6px 10px;color:#bbb;font-size:12px}
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <div class="card">
+      <label for="file">GLB laden</label>
+      <input id="file" type="file" accept=".glb,.gltf"/>
+      <div class="sep"></div>
+      <button id="mode-t">W (Move)</button>
+      <button id="mode-r">E (Rotate)</button>
+      <button id="mode-s">R (Scale)</button>
+      <button id="deselect">Deselect</button>
+      <div class="sep"></div>
+      <label>Anchor:</label>
+      <select id="anchor">
+        <option value="image">Image</option>
+        <option value="surface">Surface</option>
+      </select>
+      <div class="sep"></div>
+      <button id="save">Export scene.json</button>
+      <button id="load">scene.json laden</button>
+    </div>
+  </div>
+
+  <div id="canvas"></div>
+  <div id="hint">Tipp: W/E/R wechseln Move/Rotate/Scale • Klick ins Leere: Deselect • Maus: Orbit • Shift = schneller</div>
+
+<script type="module">
+import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+import { OrbitControls } from "https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js";
+import { TransformControls } from "https://unpkg.com/three@0.160.0/examples/jsm/controls/TransformControls.js";
+import { GLTFLoader } from "https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js";
+
+const root = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(devicePixelRatio);
+root.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0b0b0b);
+const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.01, 100);
+camera.position.set(2.5, 1.6, 2.5);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.5, 0); controls.update();
+
+const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1.1); scene.add(hemi);
+const dir = new THREE.DirectionalLight(0xffffff, 0.8); dir.position.set(3, 5, 2); scene.add(dir);
+
+const grid = new THREE.GridHelper(10, 20, 0x333333, 0x1f1f1f); grid.position.y = 0; scene.add(grid);
+const axes = new THREE.AxesHelper(0.5); axes.position.set(0,0.001,0); scene.add(axes);
+
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2(-1,-1);
+
+const tf = new TransformControls(camera, renderer.domElement);
+tf.addEventListener('dragging-changed', e => controls.enabled = !e.value);
+scene.add(tf);
+
+let current = null;           // aktuelles GLTF root
+let currentSrcName = null;    // Dateiname für Export (Hinweis)
+
+const loader = new GLTFLoader();
+document.getElementById('file').addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  if(!file) return;
+  const url = URL.createObjectURL(file);
+  loader.load(url, (gltf)=>{
+    if(current){ scene.remove(current); tf.detach(); }
+    current = gltf.scene;
+    current.traverse(n=>{ if(n.isMesh){ n.castShadow=true; n.receiveShadow=true; n.frustumCulled=false; }});
+    current.position.set(0,0,0);
+    scene.add(current);
+    tf.attach(current);
+    currentSrcName = file.name;
+  }, undefined, (err)=> alert('Fehler beim Laden: '+err.message));
+});
+
+function deselect(){ tf.detach(); current = null; }
+document.getElementById('deselect').onclick = deselect;
+
+document.getElementById('mode-t').onclick = ()=> tf.setMode('translate');
+document.getElementById('mode-r').onclick = ()=> tf.setMode('rotate');
+document.getElementById('mode-s').onclick = ()=> tf.setMode('scale');
+
+window.addEventListener('keydown', (e)=>{
+  if(e.key.toLowerCase()==='w') tf.setMode('translate');
+  if(e.key.toLowerCase()==='e') tf.setMode('rotate');
+  if(e.key.toLowerCase()==='r') tf.setMode('scale');
+  if(e.key==='Escape') deselect();
+});
+
+renderer.domElement.addEventListener('pointerdown', (ev)=>{
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((ev.clientX-rect.left)/rect.width)*2 - 1;
+  mouse.y = -((ev.clientY-rect.top)/rect.height)*2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const candidates = [];
+  if(current) current.traverse(n=>{ if(n.isMesh) candidates.push(n); });
+  const hit = raycaster.intersectObjects(candidates, true)[0];
+  if(hit && current){ tf.attach(current); } else { deselect(); }
+});
+
+function save(){
+  const anchor = document.getElementById('anchor').value;
+  const node = (obj)=>{
+    const p = obj.position, r = obj.rotation, s = obj.scale;
+    return {
+      id: "model",
+      asset: currentSrcName ? ("assets/"+currentSrcName) : "assets/model.glb",
+      transform: { position:[p.x,p.y,p.z], rotation:[r.x,r.y,r.z], scale:[s.x,s.y,s.z] },
+      behaviors: []
+    };
+  };
+  const json = {
+    name: "Project-"+Date.now(),
+    anchor: { type: anchor, targets: [] },
+    nodes: current ? [node(current)] : []
+  };
+  const blob = new Blob([JSON.stringify(json,null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = "scene.json";
+  a.click();
+}
+document.getElementById('save').onclick = save;
+
+document.getElementById('load').onclick = async ()=>{
+  const inp = document.createElement('input'); inp.type='file'; inp.accept='.json';
+  inp.onchange = async (e)=>{
+    const f = e.target.files?.[0]; if(!f) return;
+    const text = await f.text();
+    const data = JSON.parse(text);
+    document.getElementById('anchor').value = (data.anchor?.type || 'image');
+    if(data.nodes && data.nodes[0]){
+      if(!current){ current = new THREE.Group(); scene.add(current); }
+      const n = data.nodes[0];
+      current.position.fromArray(n.transform?.position || [0,0,0]);
+      const r = n.transform?.rotation || [0,0,0];
+      current.rotation.set(r[0], r[1], r[2]);
+      current.scale.fromArray(n.transform?.scale || [1,1,1]);
+      tf.attach(current);
+    }
+  };
+  inp.click();
+};
+
+function tick(){ renderer.render(scene, camera); requestAnimationFrame(tick); }
+tick();
+window.addEventListener('resize', ()=>{ camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); });
+</script>
+</body>
+</html>

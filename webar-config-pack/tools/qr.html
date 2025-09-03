@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="de">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QR Generator</title>
+<style>body{font-family:system-ui;margin:24px} input,button{padding:8px 10px;border-radius:8px;border:1px solid #ccc} #q{margin-top:16px}</style>
+<p>Gib eine URL ein (oder nutze <code>?to=</code> in der Adresszeile):</p>
+<input id="u" style="min-width:60ch" placeholder="https://example.com">
+<button id="go">QR erzeugen</button>
+<div id="q"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+const p=new URLSearchParams(location.search); if(p.get('to')) document.getElementById('u').value=p.get('to');
+function make(){
+  const url=document.getElementById('u').value.trim(); if(!url) return;
+  const el=document.getElementById('q'); el.innerHTML=''; new QRCode(el,{text:url,width:256,height:256,correctLevel:QRCode.CorrectLevel.M});
+}
+document.getElementById('go').onclick=make; if(document.getElementById('u').value) make();
+</script>
