@@ -4,29 +4,6 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/>
   <title>WebAR – Image (MindAR + Three)</title>
-
-  <!-- Polyfill zuerst, ohne async, damit er sicher aktiv ist -->
-  <script src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
-
-  <!-- Import-Map (für native Browser) -->
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-    }
-  }
-  </script>
-  <!-- Import-Map für den Polyfill -->
-  <script type="importmap-shim">
-  {
-    "imports": {
-      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-    }
-  }
-  </script>
-
   <style>
     :root{color-scheme:dark}
     html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
@@ -37,17 +14,18 @@
   </style>
 </head>
 <body>
-  <div id="ui"><button id="start">🚀 AR starten</button></div>
+  <div id="ui">
+    <button id="start" onclick="window.startAR && window.startAR()">🚀 AR starten</button>
+  </div>
   <div id="log"></div>
   <div id="target">
     <div style="color:#bbb;font:12px/1.2 system-ui;margin-bottom:4px">Target Preview:</div>
     <img id="targetImg" width="120" height="66"/>
   </div>
 
-  <!-- Wichtig: module-shim damit der Polyfill sicher greift -->
-  <script type="module-shim">
-    import * as THREE from "three";
-    import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+  <script type="module">
+    import * as THREE from "https://unpkg.com/three@0.160.0/build/three.module.js";
+    import { GLTFLoader } from "https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js";
     import { MindARThree } from "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js";
 
     const log = (m)=>{ const el=document.getElementById('log'); el.textContent += (el.textContent?'\n':'') + m; };
@@ -74,23 +52,18 @@
       return res.json();
     }
 
-    let started = false;
-    document.getElementById('start').onclick = async ()=>{
-      if(started) return; started = true;
-      document.getElementById('start').style.display='none';
-
+    window.startAR = async ()=>{
+      document.getElementById('start').disabled = true;
       try{
         const cfg = await loadConfig();
-        if(cfg.anchor?.type !== 'image') throw new Error('Config anchor.type muss "image" sein');
-        const targetSrc = cfg.anchor.targets?.[0]?.src;
-        if(!targetSrc) throw new Error('anchor.targets[0].src (.mind) fehlt');
+        const t = cfg.anchor?.targets?.[0];
+        if(!t?.src) throw new Error('anchor.targets[0].src (.mind) fehlt');
 
-        const prev = cfg.anchor.targets?.[0]?.preview;
-        if(prev){ const box=document.getElementById('target'); box.style.display='block'; document.getElementById('targetImg').src=prev; }
+        if(t.preview){ const box=document.getElementById('target'); box.style.display='block'; document.getElementById('targetImg').src=t.preview; }
 
         const mindar = new MindARThree({
           container: document.body,
-          imageTargetSrc: targetSrc,
+          imageTargetSrc: t.src,
           uiLoading: true, uiError: true, maxTrack: 1
         });
         const {renderer, scene, camera} = mindar;
@@ -112,15 +85,14 @@
         }
 
         await mindar.start();
-        // Debug nach dem Start, wenn das Video existiert
-        const iv = setInterval(()=>{
-          const v = mindar.video;
-          if(v && v.videoWidth){ log(`📹 Video ${v.videoWidth}x${v.videoHeight}`); clearInterval(iv); }
-        }, 400);
-
+        const v = mindar.video;
+        if(v) log(`📹 Video ${v.videoWidth}x${v.videoHeight}`);
         log("✅ MindAR gestartet");
         renderer.setAnimationLoop(()=> renderer.render(scene, camera));
-      }catch(e){ log('❌ '+e.message); }
+      }catch(e){
+        log('❌ '+e.message);
+        document.getElementById('start').disabled = false;
+      }
     };
   </script>
 </body>
