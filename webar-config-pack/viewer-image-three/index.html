@@ -5,9 +5,20 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/>
   <title>WebAR – Image (MindAR + Three)</title>
 
-  <!-- Import-Maps + Polyfill -->
-  <script async src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
+  <!-- Polyfill zuerst, ohne async, damit er sicher aktiv ist -->
+  <script src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
+
+  <!-- Import-Map (für native Browser) -->
   <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <!-- Import-Map für den Polyfill -->
+  <script type="importmap-shim">
   {
     "imports": {
       "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
@@ -33,10 +44,10 @@
     <img id="targetImg" width="120" height="66"/>
   </div>
 
-  <script type="module">
+  <!-- Wichtig: module-shim damit der Polyfill sicher greift -->
+  <script type="module-shim">
     import * as THREE from "three";
     import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-    // MindAR als ES-Modul (kein window.MINDAR mehr!)
     import { MindARThree } from "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js";
 
     const log = (m)=>{ const el=document.getElementById('log'); el.textContent += (el.textContent?'\n':'') + m; };
@@ -100,10 +111,13 @@
           });
         }
 
-        const v = mindar.video;
-        const iv = setInterval(()=>{ if(v.videoWidth){ log(`📹 Video ${v.videoWidth}x${v.videoHeight}`); clearInterval(iv);} }, 300);
-
         await mindar.start();
+        // Debug nach dem Start, wenn das Video existiert
+        const iv = setInterval(()=>{
+          const v = mindar.video;
+          if(v && v.videoWidth){ log(`📹 Video ${v.videoWidth}x${v.videoHeight}`); clearInterval(iv); }
+        }, 400);
+
         log("✅ MindAR gestartet");
         renderer.setAnimationLoop(()=> renderer.render(scene, camera));
       }catch(e){ log('❌ '+e.message); }
