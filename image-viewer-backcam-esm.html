@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+  <title>Image‑AR Back‑Camera (ESM)</title>
+
+  <!-- Import Map: resolve module specifiers -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/",
+      "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.module.js"
+    }
+  }
+  </script>
+
+  <style>
+    html,body{margin:0;height:100%;background:#000;overflow:hidden}
+    #ui{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6);z-index:10}
+    .box{background:#10131d;border:1px solid #2a3554;border-radius:14px;padding:18px;color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:92vw}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    select,button{background:#1b1f2d;color:#fff;border:1px solid #2a3554;border-radius:10px;padding:8px 12px;font-weight:600}
+    button.primary{background:#2a60ff;border:none}
+    #log{position:fixed;left:10px;top:10px;background:#10131d;border:1px solid #2a3554;border-radius:10px;padding:8px 10px;color:#cfd3df;font:12px ui-monospace;z-index:11;max-width:86vw;max-height:40vh;overflow:auto;white-space:pre-wrap;pointer-events:none}
+    canvas{display:block;width:100vw;height:100vh}
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <div class="box">
+      <div style="font-weight:700;margin-bottom:6px;">Image‑AR starten (Kamera wählen)</div>
+      <div class="row" style="margin-bottom:8px;">
+        <label for="cam">Kamera:</label>
+        <select id="cam"></select>
+        <button id="refresh">Neu laden</button>
+      </div>
+      <div class="row">
+        <button id="start" class="primary">Kamera aktivieren</button>
+      </div>
+      <div style="margin-top:8px;color:#cbd3ff;font-size:13px">Tipp: „Back/Rear/Environment/Wide“ ist meist die Rückkamera.</div>
+    </div>
+  </div>
+  <div id="log">Log:</div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { MindARThree } from 'mindar-image-three';
+
+    const logEl = document.getElementById('log');
+    const log = (m)=>{ console.log(m); logEl.textContent += "\n" + m; };
+
+    function getSceneData(){
+      try{ const p=new URLSearchParams(location.search); const raw=decodeURIComponent(atob(p.get('scene')||'')); return JSON.parse(raw); }
+      catch(e){ return null; }
+    }
+    const data = getSceneData();
+    const defaultMind="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind";
+    const node=(data?.nodes&&data.nodes[0])||{ id:"demo", type:"model", src:"https://modelviewer.dev/shared-assets/models/Astronaut.glb", transform:{position:[0,0,0],rotation:[0,0,0],scale:[0.5,0.5,0.5]} };
+    const targetSrc = (data?.anchor?.src?.endsWith('.mind') ? data.anchor.src : defaultMind);
+
+    const sel = document.getElementById('cam');
+    async function enumerateCams(){
+      try{
+        const devs = await navigator.mediaDevices.enumerateDevices();
+        const cams = devs.filter(d=>d.kind==='videoinput');
+        sel.innerHTML = "";
+        const score = (label)=>{ const L=(label||'').toLowerCase(); return (/(back|rear|environment|wide)/.test(L) ? 2 : /front|user/.test(L) ? 0 : 1); };
+        cams.sort((a,b)=> score(b.label)-score(a.label));
+        cams.forEach((c,i)=>{
+          const opt = document.createElement('option');
+          opt.value = c.deviceId; opt.textContent = c.label || ('Kamera ' + (i+1));
+          sel.appendChild(opt);
+        });
+        log('Kameras gefunden: ' + cams.length);
+      }catch(e){ log('enumerateDevices Fehler: ' + e.name + ' ' + e.message); }
+    }
+
+    async function preflight(){
+      try{
+        const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio:false });
+        s.getTracks().forEach(t=>t.stop());
+        log('Preflight OK.');
+      }catch(e){ log('Preflight ERROR: ' + e.name + ' ' + e.message); }
+    }
+
+    document.getElementById('refresh').onclick = enumerateCams;
+    document.getElementById('start').onclick = async ()=>{
+      try{
+        await preflight();
+        await enumerateCams();
+        const deviceId = sel.value;
+        log('Starte MindAR (ESM) mit deviceId=' + deviceId);
+
+        const mindarThree = new MindARThree({
+          container: document.body,
+          imageTargetSrc: targetSrc,
+          uiLoading: true, uiScanning: true, uiError: true,
+          // MindARThree akzeptiert videoSettings für getUserMedia
+          videoSettings: { deviceId: { exact: deviceId } }
+        });
+        const {renderer, scene, camera} = mindarThree;
+
+        const light = new THREE.HemisphereLight(0xffffff, 0x444466, 1.2); scene.add(light);
+        const dir = new THREE.DirectionalLight(0xffffff, 1); dir.position.set(2,3,1); scene.add(dir);
+
+        const anchor = mindarThree.addAnchor(0);
+        const loader = new GLTFLoader();
+        loader.load(node.src, (gltf)=>{
+          const obj = gltf.scene;
+          const t = node.transform||{position:[0,0,0],rotation:[0,0,0],scale:[0.5,0.5,0.5]};
+          obj.position.set(t.position[0],t.position[1],t.position[2]);
+          obj.rotation.set(THREE.MathUtils.degToRad(t.rotation[0]),THREE.MathUtils.degToRad(t.rotation[1]),THREE.MathUtils.degToRad(t.rotation[2]));
+          obj.scale.set(t.scale[0],t.scale[1],t.scale[2]);
+          anchor.group.add(obj);
+        }, undefined, (e)=> log('GLB Fehler: ' + e.message));
+
+        await mindarThree.start();
+        document.getElementById('ui').style.display='none';
+        renderer.setAnimationLoop(()=>{ renderer.render(scene, camera); });
+        log('AR gestartet.');
+      }catch(e){ log('Startfehler: ' + (e.name||'') + ' ' + (e.message||e)); alert('Startfehler: ' + (e.message||e)); }
+    };
+
+    (async ()=>{ try{ await preflight(); }catch(_){} await enumerateCams(); })();
+  </script>
+</body>
+</html>
