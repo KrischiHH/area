@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/>
-  <title>WebAR – Image (MindAR + Three, UMD)</title>
+  <title>WebAR – Image (MindAR + Three, UMD r139)</title>
   <style>
     :root{color-scheme:dark}
     html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
@@ -11,11 +11,13 @@
     #start{background:#111;border:1px solid #333;color:#fff;padding:10px 14px;border-radius:12px}
     #log{position:fixed;right:10px;bottom:10px;max-width:70vw;background:rgba(0,0,0,.6);color:#fff;padding:8px 10px;border-radius:10px;font:12px/1.3 system-ui;white-space:pre-wrap;z-index:3}
     #target{position:fixed;right:10px;top:10px;z-index:3;background:#111;border:1px solid #222;border-radius:10px;padding:6px;display:none}
+    video#cameraFeed{position:fixed;inset:0;object-fit:cover;width:100vw;height:100vh;z-index:0}
+    canvas.mindar-canvas{position:fixed;inset:0;z-index:1}
   </style>
 
-  <!-- 1) Three.js als GLOBAL laden -->
-  <script src="https://unpkg.com/three@0.152.2/build/three.min.js"></script>
-  <!-- 2) MindAR UMD (liefert window.MINDAR.IMAGE.*) -->
+  <!-- THREE r139 (kompatibel mit MindAR 1.1.x) -->
+  <script src="https://unpkg.com/three@0.139.2/build/three.min.js"></script>
+  <!-- MindAR UMD (liefert window.MINDAR.IMAGE.*) -->
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.1.5/dist/mindar-image-three.prod.js"></script>
 </head>
 <body>
@@ -47,27 +49,36 @@
 
     document.getElementById('start').onclick = async ()=>{
       try{
-        if(!window.THREE) throw new Error('Three.js nicht geladen (window.THREE fehlt)');
-        if(!window.MINDAR?.IMAGE?.MindARThree) throw new Error('MindAR UMD nicht geladen (window.MINDAR.IMAGE fehlt)');
+        const MindARThree = window?.MINDAR?.IMAGE?.MindARThree;
+        if(!MindARThree) throw new Error('MindAR UMD nicht geladen');
 
         const cfg = await loadConfig();
         const t = cfg.anchor?.targets?.[0]; if(!t?.src) throw new Error('anchor.targets[0].src (.mind) fehlt');
 
         if(t.preview){ document.getElementById('target').style.display='block'; document.getElementById('targetImg').src=t.preview; }
 
-        const { THREE } = window;
-        const MindARThree = window.MINDAR.IMAGE.MindARThree;
-
         const mindar = new MindARThree({ container: document.body, imageTargetSrc: t.src, uiLoading:true, uiError:true, maxTrack:1 });
         const { renderer, scene, camera } = mindar;
 
+        // Canvas sichtbar über Video legen
         renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
-        scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1));
+        renderer.setSize(innerWidth, innerHeight);
+        renderer.setClearColor(0x000000, 0);        // <— transparent
+        renderer.domElement.classList.add('mindar-canvas');
 
+        // Kamera-Video explizit einblenden (Debug + zuverlässiger BG)
+        const v = mindar.video; v.id = 'cameraFeed'; v.playsInline = true; v.muted = true;
+        document.body.prepend(v); // hinter das Canvas
+
+        // Licht + Anker + Testwürfel
+        const THREE = window.THREE;
+        scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1));
         const anchor = mindar.addAnchor(0);
 
-        // Testwürfel
-        const cube = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({metalness:0.1, roughness:0.6}));
+        const cube = new THREE.Mesh(
+          new THREE.BoxGeometry(1,1,1),
+          new THREE.MeshStandardMaterial({metalness:0.1, roughness:0.6})
+        );
         const n = (cfg.nodes||[])[0] || {};
         const p = n.transform?.position || [0,0,0.1];
         const r = n.transform?.rotation || [0,0,0];
@@ -76,8 +87,12 @@
         anchor.group.add(cube);
 
         await mindar.start();
-        const v = mindar.video; if(v) log(`📹 Video ${v.videoWidth}x${v.videoHeight}`);
+        log(`📹 Video ${v.videoWidth}x${v.videoHeight}`);
         log('✅ MindAR gestartet');
+
+        // Resize
+        addEventListener('resize', ()=>{ renderer.setSize(innerWidth, innerHeight); }, false);
+
         renderer.setAnimationLoop(()=> renderer.render(scene, camera));
       }catch(e){ log('❌ '+(e?.message||e)); }
     };
