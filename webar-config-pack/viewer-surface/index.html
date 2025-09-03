@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
   <title>WebAR – Surface Placement (Three.js + WebXR)</title>
 
-  <!-- Import-Maps (plus Shims für ältere Browser) -->
   <script async src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
   <script type="importmap">
   {
@@ -40,7 +39,7 @@ async function loadConfig(){
   }
   const res = await fetch(url, {cache:'no-store'});
   if(!res.ok) throw new Error('Config laden fehlgeschlagen: '+res.status);
-  return await res.json();
+  return res.json();
 }
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -68,9 +67,9 @@ async function ensureModel(){
     loader.load(n.asset, (gltf)=>{
       modelRoot = gltf.scene || gltf.scenes?.[0];
       const p=n.transform?.position||[0,0,0], r=n.transform?.rotation||[0,0,0], s=n.transform?.scale||[1,1,1];
-      modelRoot.position.set(p[0],p[1],p[2]); modelRoot.rotation.set(r[0],r[1],r[2]); modelRoot.scale.set(s[0],s[1],s[2]);
+      modelRoot.position.set(...p); modelRoot.rotation.set(...r); modelRoot.scale.set(...s);
       resolve(modelRoot);
-    }, undefined, e=>reject(e));
+    }, undefined, reject);
   });
 }
 function placeAtMatrix(matrix){
@@ -107,4 +106,14 @@ renderer.setAnimationLoop((t, frame)=>{
       const hits = frame.getHitTestResults(hitTestSource);
       if(hits.length){
         const pose = hits[0].getPose(refSpace);
-        reticle.visible
+        reticle.visible = true; reticle.matrix.fromArray(pose.transform.matrix);
+      } else { reticle.visible = false; }
+    }
+  }
+  renderer.render(scene, camera);
+});
+
+window.addEventListener('resize', ()=> renderer.setSize(innerWidth, innerHeight));
+</script>
+</body>
+</html>
