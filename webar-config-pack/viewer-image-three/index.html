@@ -14,9 +14,9 @@
     #target img{display:block}
   </style>
 
-  <!-- Globale THREE & MindAR (KEINE Module) -->
+  <!-- Globale THREE & MindAR (UMD! aus GitHub-Repo, nicht NPM) -->
   <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/dist/mindar-image-three.prod.js"></script>
 </head>
 <body>
   <div id="ui"><button id="start">🚀 AR starten</button></div>
@@ -48,35 +48,26 @@
     document.getElementById('start').onclick = async ()=>{
       document.getElementById('start').disabled = true;
       try{
+        if(!window.MINDAR || !window.MINDAR.IMAGE || !window.MINDAR.IMAGE.MindARThree){
+          throw new Error('MindAR UMD nicht geladen (window.MINDAR.IMAGE fehlt)');
+        }
         const cfg = await loadConfig();
         const t = cfg.anchor?.targets?.[0]; if(!t?.src) throw new Error('anchor.targets[0].src (.mind) fehlt');
 
         if(t.preview){ document.getElementById('target').style.display='block'; document.getElementById('targetImg').src=t.preview; }
 
-        // ACHTUNG: MindAR UMD-API → window.MINDAR.IMAGE.MindARThree
         const MindARThree = window.MINDAR.IMAGE.MindARThree;
+        const mindar = new MindARThree({ container: document.body, imageTargetSrc: t.src, uiLoading: true, uiError: true, maxTrack: 1 });
 
-        const mindar = new MindARThree({
-          container: document.body,
-          imageTargetSrc: t.src,
-          uiLoading: true, uiError: true, maxTrack: 1
-        });
-
-        const renderer = mindar.renderer;
-        const scene    = mindar.scene;
-        const camera   = mindar.camera;
-
+        const { renderer, scene, camera } = mindar;
         renderer.outputColorSpace = THREE.SRGBColorSpace;
         renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-
         scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1));
 
         const anchor = mindar.addAnchor(0);
 
-        // Testobjekt: bunter Würfel (kein Loader nötig)
-        const geom = new THREE.BoxGeometry(1,1,1);
-        const mat  = new THREE.MeshStandardMaterial({ metalness:0.1, roughness:0.6 });
-        const cube = new THREE.Mesh(geom, mat);
+        // Testobjekt: Würfel
+        const cube = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), new THREE.MeshStandardMaterial({metalness:0.1, roughness:0.6}));
         const n = (cfg.nodes||[])[0] || {};
         const p = n.transform?.position || [0,0,0.1];
         const r = n.transform?.rotation || [0,0,0];
