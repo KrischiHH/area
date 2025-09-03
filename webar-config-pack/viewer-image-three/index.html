@@ -5,10 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/>
   <title>WebAR – Image (MindAR + Three)</title>
 
-  <!-- Fallback für ältere Browser: Import-Maps Support -->
+  <!-- Import-Maps + Polyfill -->
   <script async src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
-
-  <!-- Import-Map: löst "three" und "three/addons/" -->
   <script type="importmap">
   {
     "imports": {
@@ -23,8 +21,7 @@
     html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
     #ui{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);z-index:3}
     #start{background:#111;border:1px solid #333;color:#fff;padding:10px 14px;border-radius:12px}
-    #log{position:fixed;right:10px;bottom:10px;max-width:70vw;background:rgba(0,0,0,.6);color:#fff;
-         padding:8px 10px;border-radius:10px;font:12px/1.3 system-ui;white-space:pre-wrap;z-index:3}
+    #log{position:fixed;right:10px;bottom:10px;max-width:70vw;background:rgba(0,0,0,.6);color:#fff;padding:8px 10px;border-radius:10px;font:12px/1.3 system-ui;white-space:pre-wrap;z-index:3}
     #target{position:fixed;right:10px;top:10px;z-index:3;background:#111;border:1px solid #222;border-radius:10px;padding:6px;display:none}
   </style>
 </head>
@@ -39,14 +36,14 @@
   <script type="module">
     import * as THREE from "three";
     import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-    // MindAR als ES-Modul importieren (keine Globals!)
+    // MindAR als ES-Modul (kein window.MINDAR mehr!)
     import { MindARThree } from "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js";
 
     const log = (m)=>{ const el=document.getElementById('log'); el.textContent += (el.textContent?'\n':'') + m; };
 
     async function loadConfig(){
-      const params = new URLSearchParams(location.search);
-      const url = params.get('project');
+      const qs = new URLSearchParams(location.search);
+      const url = qs.get('project');
       if(!url){
         return {
           name: "Demo Image",
@@ -57,39 +54,60 @@
           nodes: [{
             id:"model",
             asset:"https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/softmind/scene.gltf",
-            transform:{ position:[0,0,0.1], rotation:[0,0,0], scale:[0.005,0.005,0.005] },
-            behaviors:[]
+            transform:{ position:[0,0,0.1], rotation:[0,0,0], scale:[0.005,0.005,0.005] }
           }]
         };
       }
       const res = await fetch(url, {cache:'no-store'});
       if(!res.ok) throw new Error('Config laden fehlgeschlagen: '+res.status);
-      return await res.json();
+      return res.json();
     }
 
     let started = false;
     document.getElementById('start').onclick = async ()=>{
       if(started) return; started = true;
       document.getElementById('start').style.display='none';
+
       try{
         const cfg = await loadConfig();
         if(cfg.anchor?.type !== 'image') throw new Error('Config anchor.type muss "image" sein');
         const targetSrc = cfg.anchor.targets?.[0]?.src;
-        if(!targetSrc) throw new Error('Config anchor.targets[0].src fehlt (.mind)');
+        if(!targetSrc) throw new Error('anchor.targets[0].src (.mind) fehlt');
 
-        // Target-Preview (optional)
         const prev = cfg.anchor.targets?.[0]?.preview;
         if(prev){ const box=document.getElementById('target'); box.style.display='block'; document.getElementById('targetImg').src=prev; }
 
-        const mindarThree = new MindARThree({
+        const mindar = new MindARThree({
           container: document.body,
           imageTargetSrc: targetSrc,
           uiLoading: true, uiError: true, maxTrack: 1
         });
-        const {renderer, scene, camera} = mindarThree;
+        const {renderer, scene, camera} = mindar;
         renderer.outputColorSpace = THREE.SRGBColorSpace;
         renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-        scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.0));
+        scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1));
 
-        const anchor = mindarThree.addAnchor(0);
-        const loader
+        const anchor = mindar.addAnchor(0);
+        const loader = new GLTFLoader();
+        for(const n of (cfg.nodes||[])){
+          await new Promise((resolve,reject)=>{
+            loader.load(n.asset, (gltf)=>{
+              const o = gltf.scene || gltf.scenes?.[0];
+              const p=n.transform?.position||[0,0,0], r=n.transform?.rotation||[0,0,0], s=n.transform?.scale||[1,1,1];
+              o.position.set(...p); o.rotation.set(...r); o.scale.set(...s);
+              anchor.group.add(o); resolve();
+            }, undefined, reject);
+          });
+        }
+
+        const v = mindar.video;
+        const iv = setInterval(()=>{ if(v.videoWidth){ log(`📹 Video ${v.videoWidth}x${v.videoHeight}`); clearInterval(iv);} }, 300);
+
+        await mindar.start();
+        log("✅ MindAR gestartet");
+        renderer.setAnimationLoop(()=> renderer.render(scene, camera));
+      }catch(e){ log('❌ '+e.message); }
+    };
+  </script>
+</body>
+</html>
