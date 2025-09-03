@@ -1,22 +1,4 @@
-<!doctype html>
-<html lang="de">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
-  <title>WebAR – Surface Placement (global)</title>
-  <style>
-    html,body{margin:0;height:100%;overflow:hidden;background:#000;color:#fff;font-family:system-ui}
-    #enter{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);padding:10px 14px;border-radius:12px;background:#111;border:1px solid #333;color:#fff;z-index:2}
-    #note{position:fixed;left:50%;top:10px;transform:translateX(-50%);background:#111;border:1px solid #333;color:#ddd;border-radius:10px;padding:6px 10px;z-index:2;font:12px system-ui}
-  </style>
-  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-</head>
-<body>
-<button id="enter">Enter AR</button>
-<div id="note" style="display:none"></div>
 <script>
-const note=(m)=>{const n=document.getElementById('note'); n.textContent=m; n.style.display='block';};
-
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.xr.enabled = true;
@@ -26,39 +8,43 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera();
 scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1));
 
-// Reticle
 const ring = new THREE.RingGeometry(0.07, 0.09, 32); ring.rotateX(-Math.PI/2);
 const reticle = new THREE.Mesh(ring, new THREE.MeshBasicMaterial({ transparent:true, opacity:0.85 }));
 reticle.matrixAutoUpdate = false; reticle.visible = false; scene.add(reticle);
 
-// Würfel
 const cube = new THREE.Mesh(new THREE.BoxGeometry(0.2,0.2,0.2), new THREE.MeshStandardMaterial({metalness:0.2, roughness:0.6}));
 let cubePlaced = false;
 
 let hitTestSource = null, hitTestSourceRequested = false;
+let xrSession = null;
 
 document.getElementById('enter').onclick = async ()=>{
   if(!navigator.xr){ alert('AR nicht verfügbar (navigator.xr fehlt).'); return; }
   const supported = await navigator.xr.isSessionSupported('immersive-ar');
   if(!supported){ alert('AR nicht verfügbar.'); return; }
 
-  const session = await navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['hit-test'] });
+  xrSession = await navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['hit-test'] });
   renderer.xr.setReferenceSpaceType('local');
-  await renderer.xr.setSession(session);
+  await renderer.xr.setSession(xrSession);
 
-  // WICHTIG: Controller 0 empfängt "select" (Tap)
   const controller = renderer.xr.getController(0);
   controller.addEventListener('select', ()=>{
     if(reticle.visible){
       if(!cubePlaced){ scene.add(cube); cubePlaced = true; }
       cube.position.setFromMatrixPosition(reticle.matrix);
-    } else {
-      note('Keine Fläche erkannt – bewege das Gerät über eine ebene Fläche.');
-      setTimeout(()=>document.getElementById('note').style.display='none', 2000);
     }
   });
   scene.add(controller);
 };
+
+// **NEU** – XR-Session beenden, wenn die Seite verschwindet/wechselst
+function endXR(){
+  const s = renderer.xr.getSession();
+  if(s){ s.end(); }
+}
+window.addEventListener('pagehide', endXR);
+window.addEventListener('beforeunload', endXR);
+document.addEventListener('visibilitychange', ()=>{ if (document.hidden) endXR(); });
 
 renderer.setAnimationLoop((t, frame)=>{
   const session = renderer.xr.getSession();
@@ -86,5 +72,3 @@ renderer.setAnimationLoop((t, frame)=>{
 
 window.addEventListener('resize', ()=> renderer.setSize(innerWidth, innerHeight));
 </script>
-</body>
-</html>
