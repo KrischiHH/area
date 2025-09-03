@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+  <title>Surface‑AR Viewer (Hotfix v2)</title>
+  <style>
+    html,body{margin:0;height:100%;background:#000}
+    #fallback{display:none;position:absolute;inset:0}
+    #tip{position:fixed;top:10px;left:10px;z-index:10;color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:rgba(0,0,0,.45);padding:8px 10px;border-radius:10px}
+    .ar-btn{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);padding:10px 14px;border-radius:12px;border:none;background:#2a60ff;color:#fff;font-weight:600}
+    .overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6);z-index:10}
+    .box{background:#10131d;border:1px solid #2a3554;border-radius:14px;padding:18px;color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:90vw}
+    .btn{background:#2a60ff;color:#fff;border:none;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}
+    .hint{color:#cbd3ff;margin-top:8px;font-size:13px}
+    .log{position:fixed;left:10px;bottom:10px;background:#10131d;border:1px solid #2a3554;border-radius:10px;padding:8px 10px;color:#cfd3df;font:12px ui-monospace;z-index:11;max-width:80vw;max-height:40vh;overflow:auto;white-space:pre-wrap}
+  </style>
+  <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+</head>
+<body>
+  <div class="overlay" id="gate">
+    <div class="box">
+      <div style="font-weight:700;margin-bottom:8px;">Surface‑AR starten</div>
+      <button class="btn" id="startBtn">Kamera aktivieren</button>
+      <div class="hint">Android: WebXR‑Session; iOS: Fallback‑Button öffnet AR‑Viewer (Quick Look).</div>
+    </div>
+  </div>
+  <div class="log" id="log">Log:</div>
+
+  <div id="tip">Suche eine Oberfläche. Tippe zum Platzieren.</div>
+  <div id="fallback">
+    <model-viewer id="mv" ar ar-modes="scene-viewer quick-look webxr" camera-controls style="width:100%;height:100%; background:#000;" exposure="1">
+      <button slot="ar-button" class="ar-btn">In AR öffnen</button>
+    </model-viewer>
+  </div>
+  <canvas id="c"></canvas>
+
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.158.0/build/three.module.js';
+    import { GLTFLoader } from 'https://unpkg.com/three@0.158.0/examples/jsm/loaders/GLTFLoader.js';
+    import { ARButton } from 'https://unpkg.com/three@0.158.0/examples/jsm/webxr/ARButton.js';
+    const logEl = document.getElementById('log'); const log=(m)=>{ console.log(m); logEl.textContent += "\n" + m; };
+
+    function getSceneData(){ try{ const p=new URLSearchParams(location.search); const raw=decodeURIComponent(atob(p.get('scene')||'')); return JSON.parse(raw); } catch(e){ return null; } }
+    const data = getSceneData();
+    const node = (data?.nodes&&data.nodes[0]) || { id:"demo", type:"model", src:"https://modelviewer.dev/shared-assets/models/Astronaut.glb", transform:{position:[0,0,0],rotation:[0,0,0],scale:[0.5,0.5,0.5]} };
+
+    const canvas = document.querySelector('#c');
+    const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.xr.enabled = true;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.01, 20);
+    const light = new THREE.HemisphereLight(0xffffff, 0x444466, 1.2); scene.add(light);
+    const dir = new THREE.DirectionalLight(0xffffff, 1); dir.position.set(1,2,1); scene.add(dir);
+
+    const loader = new GLTFLoader();
+    let placed = null, mixer = null, clock = new THREE.Clock();
+
+    function loadModel(url){ return new Promise((resolve,reject)=>{
+      loader.load(url, (gltf)=>{ const obj=gltf.scene; if(gltf.animations&&gltf.animations.length){ mixer=new THREE.AnimationMixer(obj); const act=mixer.clipAction(gltf.animations[0]); act.play(); } resolve(obj); }, undefined, (e)=>{ log('GLB Fehler: '+e.message); reject(e); });
+    }); }
+
+    async function maybeFallback(){
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+      if (!navigator.xr || !(await navigator.xr.isSessionSupported('immersive-ar'))){
+        document.querySelector('#fallback').style.display = 'block';
+        const mv = document.querySelector('#mv');
+        mv.src = node.src;
+        const hasIOS = (node.behaviors||[]).find(b=>b.action==='iosSrc');
+        if (isIOS && !hasIOS){ document.getElementById('tip').textContent = "iOS Quick Look benötigt USDZ (ios-src)."; }
+        log('Fallback aktiv (kein WebXR).');
+        return true;
+      }
+      return false;
+    }
+
+    let reticle, hitTestSource=null;
+    function setupXR(){
+      log('Erzeuge ARButton & starte Renderloop…');
+      document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
+      const controller = renderer.xr.getController(0); scene.add(controller);
+      controller.addEventListener('select', async ()=>{
+        if (!reticle.visible || placed) return;
+        placed = await loadModel(node.src);
+        placed.position.setFromMatrixPosition(reticle.matrix);
+        placed.scale.set(...(node.transform?.scale || [0.5,0.5,0.5]));
+        scene.add(placed);
+        log('Objekt platziert.');
+      });
+      const reticleGeo=new THREE.RingGeometry(0.08,0.1,32).rotateX(-Math.PI/2);
+      const reticleMat=new THREE.MeshBasicMaterial({color:0xffffff});
+      reticle=new THREE.Mesh(reticleGeo,reticleMat); reticle.matrixAutoUpdate=false; reticle.visible=false; scene.add(reticle);
+
+      renderer.setAnimationLoop((time, frame)=>{
+        if (mixer) mixer.update(clock.getDelta());
+        if (frame){
+          const ref = renderer.xr.getReferenceSpace();
+          const session = renderer.xr.getSession();
+          if (!hitTestSource){
+            session.requestReferenceSpace('viewer').then((space)=>{
+              session.requestHitTestSource({ space }).then((src)=>{ hitTestSource = src; log('HitTestSource bereit.'); });
+            });
+            session.addEventListener('end', ()=>{ hitTestSource = null; log('Session beendet.'); });
+          }
+          const pose = frame.getViewerPose(ref);
+          if (pose && hitTestSource){
+            const hits = frame.getHitTestResults(hitTestSource);
+            if (hits.length){
+              const hit = hits[0];
+              const p = hit.getPose(ref);
+              reticle.visible = true;
+              reticle.matrix.fromArray(p.transform.matrix);
+            } else reticle.visible = false;
+          }
+        }
+        renderer.render(scene, camera);
+      });
+
+      window.addEventListener('resize', ()=>{ renderer.setSize(innerWidth,innerHeight); camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); });
+    }
+
+    // User gesture gate
+    const gate = document.getElementById('gate');
+    document.getElementById('startBtn').onclick = async ()=>{
+      try{
+        if (await maybeFallback()){
+          gate.style.display='none';
+        } else {
+          setupXR();
+          gate.style.display='none';
+          log('WebXR bereit.');
+        }
+      }catch(e){ console.error(e); log('Startfehler: '+(e.message||e)); alert('Startfehler: '+(e.message||e)); }
+    };
+  </script>
+</body>
+</html>
