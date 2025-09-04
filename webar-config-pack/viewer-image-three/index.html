@@ -7,25 +7,24 @@
   <style>
     :root{color-scheme:dark}
     html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-    /* UI */
     #ui{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:9999;display:flex;gap:8px;flex-wrap:wrap}
     button{background:#111;border:1px solid #333;color:#fff;padding:10px 14px;border-radius:12px}
     #log{position:fixed;right:10px;bottom:10px;max-width:80vw;background:rgba(0,0,0,.7);color:#fff;padding:10px 12px;border-radius:12px;font:12px/1.35 system-ui;white-space:pre-wrap;z-index:9999}
     #target{position:fixed;right:10px;top:10px;z-index:9999;background:#111;border:1px solid #222;border-radius:10px;padding:6px;display:none}
     #picker{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:9999;background:#111;border:1px solid #333;color:#ddd;border-radius:12px;padding:8px 10px;display:none}
     #picker select{min-width:280px;max-width:70vw;background:#0b0b0b;border:1px solid #333;color:#fff;border-radius:10px;padding:8px}
-    /* echtes Kameravideo sichtbar (hinter Canvas) */
+    /* echtes Kameravideo hinter Canvas */
     video#cameraFeed{position:fixed;inset:0;width:100vw;height:100vh;object-fit:cover;z-index:0}
     canvas{position:fixed;inset:0;z-index:1}
   </style>
-  <!-- Nur die UMD-Version! (liefert window.MINDAR.IMAGE + THREE) -->
+  <!-- Nur MindAR UMD (liefert window.MINDAR.IMAGE + THREE) -->
   <script src="https://unpkg.com/mind-ar@1.1.5/dist/mindar-image-three.prod.js"></script>
 </head>
 <body>
   <div id="ui">
     <button id="start">🚀 AR starten</button>
     <button id="choose">🎥 Kamera wählen</button>
-    <button id="next"  style="display:none">➡️ Nächste Kamera</button>
+    <button id="next" style="display:none">➡️ Nächste Kamera</button>
   </div>
   <div id="picker">
     <select id="cams"></select>
@@ -37,64 +36,42 @@
 <script>
 const log = (m)=>{ const el=document.getElementById('log'); el.textContent += (el.textContent?'\n':'') + m; };
 
-let devices = [];           // videoinput-Liste (sortiert)
-let deviceIdx = 0;          // aktueller Index
-let mindar = null;
+let devices=[], deviceIdx=0, mindar=null;
 
+async function ensureLabels(){ try{ const s=await navigator.mediaDevices.getUserMedia({video:true}); s.getTracks().forEach(t=>t.stop()); }catch{} }
 async function enumerateCams(){
-  // Permission holen, damit Labels sichtbar sind
-  try{ const tmp=await navigator.mediaDevices.getUserMedia({video:true}); tmp.getTracks().forEach(t=>t.stop()); }catch{}
+  await ensureLabels();
   devices = (await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
-  // „back / rear / environment“ zuerst
-  devices.sort((a,b)=>{
+  devices.sort((a,b)=>{ // back/environment zuerst
     const ra=/back|rear|environment/i.test(a.label)?-1:0;
     const rb=/back|rear|environment/i.test(b.label)?-1:0;
     return ra-rb;
   });
-  // auf gespeicherte deviceId positionieren
   const saved = localStorage.getItem('webar.cameraId');
-  if(saved){
-    const idx = devices.findIndex(d=>d.deviceId===saved);
-    if(idx>=0) deviceIdx = idx;
-  }
+  if(saved){ const i = devices.findIndex(d=>d.deviceId===saved); if(i>=0) deviceIdx=i; }
 }
-
 function fillPicker(){
-  const sel = document.getElementById('cams');
-  sel.innerHTML = '';
-  devices.forEach((d,i)=>{
-    const o=document.createElement('option');
-    o.value = i;
-    o.textContent = d.label || `Kamera ${d.deviceId.slice(0,6)}…`;
-    if(i===deviceIdx) o.selected = true;
-    sel.appendChild(o);
-  });
+  const sel = document.getElementById('cams'); sel.innerHTML='';
+  devices.forEach((d,i)=>{ const o=document.createElement('option'); o.value=i; o.textContent=d.label||`Kamera ${d.deviceId.slice(0,6)}…`; if(i===deviceIdx) o.selected=true; sel.appendChild(o); });
 }
-
 function showPicker(){ fillPicker(); document.getElementById('picker').style.display='block'; }
-function useSelected(){
+async function useSelected(){
   deviceIdx = parseInt(document.getElementById('cams').value,10)||0;
   const d = devices[deviceIdx];
   localStorage.setItem('webar.cameraId', d.deviceId);
   document.getElementById('picker').style.display='none';
   log('✅ Bevorzugte Kamera: '+(d.label||d.deviceId));
+  await startWithCurrentDevice(); // <— NEU: direkt anwenden!
 }
-
-function patchNextGetUserMedia({deviceId, environmentFallback}){
-  const orig = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
-  let used=false;
-  navigator.mediaDevices.getUserMedia = (constraints)=>{
+function patchNextGUM(deviceId){
+  const orig=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices); let used=false;
+  navigator.mediaDevices.getUserMedia=(constraints)=>{
     if(!used){
       const v = constraints?.video===true ? {} : (constraints?.video||{});
-      const c = {...constraints, video:{...v}};
-      if(deviceId){ c.video.deviceId = { exact: deviceId }; }
-      else if(environmentFallback){ c.video.facingMode = { ideal:'environment' }; }
-      c.video.width = { ideal:1280 }; c.video.height = { ideal:720 };
-      constraints = c; used = true;
+      constraints={...constraints, video:{...v, deviceId:{exact:deviceId}, width:{ideal:1280}, height:{ideal:720}}};
+      used=true;
     }
-    const p = orig(constraints);
-    p.finally(()=>{ navigator.mediaDevices.getUserMedia = orig; });
-    return p;
+    const p=orig(constraints); p.finally(()=>{ navigator.mediaDevices.getUserMedia=orig; }); return p;
   };
 }
 
@@ -102,82 +79,56 @@ async function startWithCurrentDevice(){
   const M = window.MINDAR?.IMAGE; if(!M?.MindARThree){ log('❌ MindAR UMD fehlt'); return; }
   const { MindARThree, THREE } = M;
 
-  // Konfig laden (Demo-fallback)
+  // Config laden (Fallback)
   const qs = new URLSearchParams(location.search);
-  let url = qs.get('project');
+  const url = qs.get('project');
   let cfg;
   if(!url){
-    cfg = {
-      anchor:{ type:"image", targets:[{
-        src:"https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind",
-        preview:"https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png"
-      }]},
-      nodes:[{ id:"cube", transform:{ position:[0,0,0.1], rotation:[0,0,0], scale:[0.15,0.15,0.15] } }]
-    };
+    cfg={anchor:{type:"image",targets:[{src:"https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind",preview:"https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png"}]},nodes:[{id:"cube",transform:{position:[0,0,0.1],rotation:[0,0,0],scale:[0.15,0.15,0.15]}}]};
   }else{
-    const r = await fetch(url,{cache:'no-store'}); if(!r.ok) throw new Error('Config '+r.status);
-    cfg = await r.json();
+    const r=await fetch(url,{cache:'no-store'}); if(!r.ok) throw new Error('Config '+r.status); cfg=await r.json();
   }
-  const target = cfg.anchor?.targets?.[0];
-  if(target?.preview){ document.getElementById('target').style.display='block'; targetImg.src=target.preview; }
+  const target = cfg.anchor?.targets?.[0]; if(target?.preview){ document.getElementById('target').style.display='block'; targetImg.src=target.preview; }
 
-  // vorherige Session stoppen
   if(mindar){ try{ await mindar.stop(); }catch{} mindar=null; }
 
-  // gewünschte Kamera fürs nächste getUserMedia setzen
-  const dev = devices[deviceIdx];
-  if(dev){ patchNextGetUserMedia({deviceId:dev.deviceId}); log('🎥 erzwinge: '+(dev.label||dev.deviceId)); }
-  else    { patchNextGetUserMedia({environmentFallback:true}); log('🎥 fallback: facingMode=environment'); }
+  const dev = devices[deviceIdx]; if(!dev){ log('❌ keine Kameras gefunden'); return; }
+  patchNextGUM(dev.deviceId); log('🎥 erzwinge: '+(dev.label||dev.deviceId));
 
-  // MindAR initialisieren
   mindar = new MindARThree({ container: document.body, imageTargetSrc: target.src, uiLoading:true, uiError:true, maxTrack:1 });
   const { renderer, scene, camera } = mindar;
-  scene.add(new M.THREE.HemisphereLight(0xffffff,0x444444,1));
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  renderer.setClearColor(0x000000, 0); // <— Canvas transparent
+  scene.add(new THREE.HemisphereLight(0xffffff,0x444444,1));
 
   await mindar.start();
 
-  // verwendete Kamera + Auflösung anzeigen
-  const track = mindar.video?.srcObject?.getVideoTracks?.()[0];
-  const set = track?.getSettings?.() || {};
-  const devId = set.deviceId || '(unbekannt)';
-  const label = (await navigator.mediaDevices.enumerateDevices()).find(d=>d.deviceId===devId)?.label || '';
-  log(`📹 Stream: ${mindar.video?.videoWidth||0}×${mindar.video?.videoHeight||0} | ${label||devId}`);
-
-  // Video sichtbar hinter Canvas einblenden (nie mehr „schwarz“)
-  if(mindar.video){
-    mindar.video.id='cameraFeed'; mindar.video.playsInline=true; mindar.video.muted=true;
-    if(!document.getElementById('cameraFeed')) document.body.prepend(mindar.video);
+  // Video wirklich sichtbar hinter Canvas
+  const v = mindar.video;
+  if(v){
+    v.id='cameraFeed'; v.playsInline=true; v.muted=true;
+    if(!document.getElementById('cameraFeed')) document.body.prepend(v);
+    log(`📹 Stream: ${v.videoWidth||0}×${v.videoHeight||0}`);
+    // genutzte deviceId/Label
+    const track=v.srcObject?.getVideoTracks?.()[0];
+    const set=track?.getSettings?.(); const devId=set?.deviceId;
+    if(devId && devId!==dev.deviceId) log('⚠️ Browser hat andere Kamera gewählt');
   }
 
   document.getElementById('next').style.display = devices.length>1 ? 'inline-block':'none';
   renderer.setAnimationLoop(()=> renderer.render(scene, camera));
 }
 
-async function startFlow(){
-  try{
-    document.getElementById('start').disabled = true;
-    await enumerateCams();
-    await startWithCurrentDevice();
-    log('✅ MindAR läuft – scanne den Marker');
-  }catch(e){
-    log('❌ '+(e?.name||'')+' '+(e?.message||e));
-    document.getElementById('start').disabled = false;
-  }
-}
+async function startFlow(){ document.getElementById('start').disabled=true; await enumerateCams(); await startWithCurrentDevice(); log('✅ MindAR läuft – scanne den Marker'); }
+async function nextCamera(){ deviceIdx=(deviceIdx+1)%devices.length; localStorage.setItem('webar.cameraId', devices[deviceIdx].deviceId); log('🔁 Wechsel zu: '+(devices[deviceIdx].label||devices[deviceIdx].deviceId)); await startWithCurrentDevice(); }
 
-async function nextCamera(){
-  deviceIdx = (deviceIdx + 1) % devices.length;
-  localStorage.setItem('webar.cameraId', devices[deviceIdx].deviceId);
-  log('🔁 Wechsel zu: '+(devices[deviceIdx].label||devices[deviceIdx].deviceId));
-  await startWithCurrentDevice();
-}
+// UI
+document.getElementById('start').onclick=startFlow;
+document.getElementById('choose').onclick=async ()=>{ await enumerateCams(); showPicker(); };
+document.getElementById('use').onclick=useSelected;
+document.getElementById('next').onclick=nextCamera;
 
-// UI-Hooks
-document.getElementById('start').onclick = startFlow;
-document.getElementById('choose').onclick = async ()=>{ await enumerateCams(); showPicker(); };
-document.getElementById('use').onclick = useSelected;
-
-// beim Verlassen freigeben
+// aufräumen
 window.addEventListener('pagehide', async ()=>{ if(mindar){ try{ await mindar.stop(); }catch{} }});
 document.addEventListener('visibilitychange', async ()=>{ if(document.hidden && mindar){ try{ await mindar.stop(); }catch{} }});
 </script>
