@@ -3,20 +3,20 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
-  <title>ARea – Image Tracking (local)</title>
+  <title>ARea – Image Tracking (robust)</title>
 
-  <!-- exakt so wie in deinem /lib -->
+  <!-- exakt wie in deinem /lib -->
   <script src="./lib/aframe-v1.4.0.min.js"></script>
   <script src="./lib/mindar-image-aframe.prod.js"></script>
 
   <style>
     :root { color-scheme: dark; }
     html,body{margin:0;height:100%;background:#000;font-family:system-ui,-apple-system,Segoe UI,Roboto}
-    .badge{position:fixed;top:10px;left:10px;z-index:40;background:rgba(0,0,0,.65);color:#fff;padding:6px 10px;border-radius:10px;font-size:12px}
+    .badge{position:fixed;top:10px;left:10px;z-index:50;background:rgba(0,0,0,.65);color:#fff;padding:6px 10px;border-radius:10px;font-size:12px}
     .btn{padding:10px 12px;border-radius:12px;background:#111;color:#fff;border:1px solid #333}
-    #tap{position:fixed;inset:0;z-index:35;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5);backdrop-filter:blur(4px)}
-    #ui{position:fixed;top:10px;right:10px;z-index:40;display:flex;gap:8px}
-    .hint{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;place-items:center;padding:10px;background:linear-gradient(180deg,rgba(0,0,0,0),rgba(0,0,0,.7));color:#eee;font-size:14px}
+    #tap{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.45);backdrop-filter:blur(4px)}
+    #ui{position:fixed;top:10px;right:10px;z-index:50;display:flex;gap:8px}
+    .hint{position:fixed;left:0;right:0;bottom:0;z-index:30;display:grid;place-items:center;padding:10px;background:linear-gradient(180deg,rgba(0,0,0,0) 0,rgba(0,0,0,.7) 60%);color:#eee;font-size:14px}
     .hint a{color:#a8d1ff;text-decoration:none}
   </style>
 </head>
@@ -25,12 +25,12 @@
   <div id="tap"><button id="start" class="btn">AR STARTEN</button></div>
   <div id="ui"><button id="switchCam" class="btn">Kamera wechseln</button></div>
 
+  <!-- autoStart AUS; wir starten manuell, NACHDEM die Scene fertig ist -->
   <a-scene
     mindar-image="imageTargetSrc: ./demo/card.mind; autoStart: false;"
     vr-mode-ui="enabled:false"
     device-orientation-permission-ui="enabled:true"
     renderer="colorManagement:true, physicallyCorrectLights:true">
-
     <a-assets timeout="60000">
       <img id="targetImg" src="./demo/card.png">
     </a-assets>
@@ -51,59 +51,94 @@
   <script>
     const scene = document.querySelector('a-scene');
     const badge = document.getElementById('status');
-    const tap = document.getElementById('tap');
-    const btnStart = document.getElementById('start');
+    const tap   = document.getElementById('tap');
+    const btnStart  = document.getElementById('start');
     const btnSwitch = document.getElementById('switchCam');
-    let cams=[], camIndex=0, starting=false;
 
-    // Autostart-Fallback (iOS)
-    setTimeout(()=>{ if(badge.textContent.startsWith('BOOTING')) tap.style.display='flex'; },1200);
+    // ---- Hilfsfunktionen ----
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+
+    async function waitForSceneLoaded() {
+      if (scene.hasLoaded) return;
+      await new Promise(res => scene.addEventListener('loaded', res, { once:true }));
+      // zusätzlich ein Tick warten, bis alle Systems initialisiert sind
+      await wait(50);
+    }
+
+    async function waitForMindARSystem(timeout=4000) {
+      const t0 = performance.now();
+      while (performance.now() - t0 < timeout) {
+        const sys = scene.systems && scene.systems['mindar-image-system'];
+        if (sys && typeof sys.start === 'function') return sys;
+        await wait(30);
+      }
+      return null;
+    }
 
     async function listCameras(){
       try{
+        // Permissions antriggern, damit Labels zurückkommen
         await navigator.mediaDevices.getUserMedia({video:true,audio:false}).catch(()=>{});
         const devs = await navigator.mediaDevices.enumerateDevices();
-        cams = devs.filter(d=>d.kind==='videoinput');
-      }catch(e){ badge.textContent='Kamera blockiert'; }
+        return devs.filter(d=>d.kind==='videoinput');
+      }catch(e){
+        badge.textContent = 'Kamera blockiert / keine Erlaubnis';
+        return [];
+      }
     }
 
+    let cams=[], camIndex=0, starting=false;
+
     async function startWith(deviceId,label){
-      const sys = scene.systems['mindar-image-system'];
-      if(!sys){ badge.textContent='START ERROR — MindAR-Script fehlt (404?)'; return; }
-      if(starting) return; starting=true;
+      if(starting) return; starting = true;
       try{
-        if(sys._started||sys.started){ try{ await sys.stop(); }catch(_){} }
-        try{ await sys.start({deviceId}); } catch { await sys.start({video:{deviceId:{exact:deviceId}}}); }
+        // Warten bis Szene & MindAR-System wirklich bereit sind
+        await waitForSceneLoaded();
+        const sys = await waitForMindARSystem();
+        if (!sys) { badge.textContent='START ERROR — MindAR-System nicht bereit'; starting=false; return; }
+
+        // evtl. laufende Session stoppen
+        if (sys._started || sys.started) { try { await sys.stop(); } catch(_){} }
+
+        // Start (deviceId bevorzugt; Fallback exact-Constraint)
+        try { await sys.start({ deviceId }); }
+        catch { await sys.start({ video: { deviceId: { exact: deviceId } } }); }
+
         tap.style.display='none';
-        badge.textContent='AR READY — '+(label||'')+' scanne ./demo/card.png';
-      }catch(e){
+        badge.textContent = 'AR READY — '+(label||'')+' scanne ./demo/card.png';
+      } catch(e){
         console.error(e);
-        badge.textContent='START ERROR — '+(e?.message||e);
+        badge.textContent = 'START ERROR — '+(e?.message||e);
         tap.style.display='flex';
-      }finally{ starting=false; }
+      } finally {
+        starting=false;
+      }
     }
 
     async function startPreferred(){
-      await listCameras();
-      if(!cams.length){ badge.textContent='Keine Kamera'; return; }
-      const envIdx=cams.findIndex(c=>/back|rear|environment/i.test(c.label));
-      camIndex=envIdx>=0?envIdx:0;
+      cams = await listCameras();
+      if (!cams.length){ badge.textContent='Keine Kamera'; return; }
+      const envIdx = cams.findIndex(c=>/back|rear|environment/i.test(c.label));
+      camIndex = envIdx>=0 ? envIdx : 0;
       await startWith(cams[camIndex].deviceId);
     }
 
+    // UI
+    setTimeout(()=>{ if(badge.textContent.startsWith('BOOTING')) tap.style.display='flex'; }, 1100);
     btnStart.addEventListener('click', startPreferred);
     btnSwitch.addEventListener('click', async ()=>{
-      if(!cams.length) await listCameras();
-      if(!cams.length) return;
-      camIndex=(camIndex+1)%cams.length;
-      const c=cams[camIndex];
-      await startWith(c.deviceId,'wechsel: '+(c.label||('Cam '+camIndex)));
+      if (!cams.length) cams = await listCameras();
+      if (!cams.length) return;
+      camIndex = (camIndex + 1) % cams.length;
+      const c = cams[camIndex];
+      await startWith(c.deviceId, 'wechsel: ' + (c.label || ('Cam '+camIndex)));
     });
 
+    // Events
     scene.addEventListener('arReady', ()=>{ if(!badge.textContent.includes('AR READY')) badge.textContent='AR READY — scanne ./demo/card.png'; });
-    scene.addEventListener('arError', e=>{ tap.style.display='flex'; badge.textContent='AR ERROR — '+(e?.detail||'Unbekannt'); });
+    scene.addEventListener('arError',  e=>{ tap.style.display='flex'; badge.textContent='AR ERROR — '+(e?.detail||'Unbekannt'); });
 
-    // Pflichtdateien prüfen (zeigt konkrete 404)
+    // Pflichtdateien prüfen und bei 404 melden
     (async()=>{
       const base = location.pathname.replace(/\/[^/]*$/,'');
       const urls=[
