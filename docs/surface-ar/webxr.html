@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Surface AR – WebXR Hit-Test (Android Chrome)</title>
+  <style>
+    html,body{margin:0;height:100%;overflow:hidden;background:#000;color:#fff;font-family:system-ui}
+    #enter{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);padding:12px 18px;border-radius:12px;border:1px solid #555;background:#111;color:#fff}
+    #msg{position:fixed;left:12px;bottom:12px;opacity:.9}
+  </style>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module">
+    import * as THREE from 'three';
+    import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+
+    let camera, scene, renderer, reticle, controller, hitTestSource = null, hitTestSourceRequested = false, model = null, mixer = null;
+    const clock = new THREE.Clock();
+
+    function init() {
+      const container = document.body;
+
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera();
+
+      renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.xr.enabled = true;
+      container.appendChild(renderer.domElement);
+
+      // Reticle
+      const ring = new THREE.RingGeometry(0.07, 0.08, 32).rotateX(-Math.PI/2);
+      const mat = new THREE.MeshBasicMaterial({color:0x66ccff});
+      reticle = new THREE.Mesh(ring, mat);
+      reticle.matrixAutoUpdate = false;
+      reticle.visible = false;
+      scene.add(reticle);
+
+      controller = renderer.xr.getController(0);
+      controller.addEventListener('select', onSelect);
+      scene.add(controller);
+
+      window.addEventListener('resize', onWindowResize);
+
+      const btn = document.getElementById('enter');
+      btn.addEventListener('click', async () => {
+        if (!navigator.xr) {
+          alert('WebXR nicht verfügbar. Nutze stattdessen die native Surface-AR Seite.');
+          return;
+        }
+        const isARSupported = await navigator.xr.isSessionSupported('immersive-ar');
+        if (!isARSupported) {
+          alert('Dein Gerät/Browser unterstützt kein AR im WebXR. Nutze die native Surface-AR Seite.');
+          return;
+        }
+        const session = await navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['hit-test', 'local-floor'] });
+        renderer.xr.setReferenceSpaceType('local-floor');
+        await renderer.xr.setSession(session);
+        btn.style.display = 'none';
+        animate();
+      });
+    }
+
+    function onSelect() {
+      if (!reticle.visible) return;
+      // Lade Beispielmodell (extern gehostet)
+      if (!model) {
+        const loader = new GLTFLoader();
+        loader.load('https://modelviewer.dev/shared-assets/models/Astronaut.glb', (gltf) => {
+          model = gltf.scene;
+          model.scale.set(0.6,0.6,0.6);
+          model.position.setFromMatrixPosition(reticle.matrix);
+          scene.add(model);
+        });
+      } else {
+        model.position.setFromMatrixPosition(reticle.matrix);
+      }
+    }
+
+    function onWindowResize() {
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function animate() {
+      renderer.setAnimationLoop(render);
+    }
+
+    function render(timestamp, frame) {
+      if (!frame) return;
+
+      const referenceSpace = renderer.xr.getReferenceSpace();
+      const session = renderer.xr.getSession();
+
+      if (!hitTestSourceRequested) {
+        session.requestReferenceSpace('viewer').then((viewerSpace) => {
+          session.requestHitTestSource({ space: viewerSpace }).then((source) => {
+            hitTestSource = source;
+          });
+        });
+        session.addEventListener('end', () => {
+          hitTestSourceRequested = false;
+          hitTestSource = null;
+        });
+        hitTestSourceRequested = true;
+      }
+
+      if (hitTestSource) {
+        const pose = frame.getViewerPose(referenceSpace);
+        if (pose) {
+          const results = frame.getHitTestResults(hitTestSource);
+          if (results.length) {
+            const hit = results[0];
+            const pose = hit.getPose(referenceSpace);
+            reticle.visible = true;
+            reticle.matrix.fromArray(pose.transform.matrix);
+          } else {
+            reticle.visible = false;
+          }
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+</head>
+<body>
+  <button id="enter">Start AR</button>
+  <div id="msg">Android Chrome empfohlen · Tippe auf den Boden, um das Modell zu platzieren</div>
+</body>
+</html>

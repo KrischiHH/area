@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Surface AR – Native (Scene Viewer / Quick Look)</title>
+  <!-- model-viewer: nutzt Android Scene Viewer & iOS Quick Look -->
+  <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+  <style>
+    html,body{margin:0;height:100%;}
+    body{display:grid;place-items:center;background:#111;color:#e8eefc;font-family:system-ui}
+    model-viewer{width:100%;max-width:640px;height:85vh;border-radius:16px;overflow:hidden}
+    button[slot="ar-button"]{padding:.8rem 1.2rem;border-radius:12px;border:1px solid rgba(255,255,255,.2);background:#222;color:#fff}
+  </style>
+</head>
+<body>
+  <model-viewer src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
+                ios-src="https://modelviewer.dev/shared-assets/models/Astronaut.usdz"
+                ar ar-modes="scene-viewer quick-look webxr"
+                camera-controls autoplay exposure="1" shadow-intensity="1"
+                environment-image="https://modelviewer.dev/shared-assets/environments/neutral.hdr">
+    <button slot="ar-button">In AR öffnen</button>
+  </model-viewer>
+
+  <div style="position:fixed;left:12px;bottom:12px;color:#fff;opacity:.85;font:14px/1.4 system-ui">
+    <b>Tipp:</b> Ersetze die URLs durch eigene Dateien unter <code>../assets/models/</code> und <code>../assets/usdz/</code>.
+  </div>
+</body>
+</html>
