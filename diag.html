@@ -1,0 +1,23 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Diag</title>
+<style>body{margin:0;background:#000;color:#fff;font:14px system-ui}main{max-width:900px;margin:0 auto;padding:16px}video{width:100%;background:#111;border-radius:12px}pre{white-space:pre-wrap;background:#111;padding:12px;border-radius:12px}</style>
+<main>
+<h1>Diagnose</h1>
+<button id="cam">Kamera starten</button>
+<video id="v" playsinline autoplay muted></video>
+<pre id="out"></pre>
+</main>
+<script>
+const o = document.getElementById('out'), v = document.getElementById('v');
+function log(...a){ o.textContent += a.join(' ') + '\n'; }
+(async () => {
+  log('HTTPS or localhost:', (location.protocol==='https:'||location.hostname==='localhost'));
+  log('WebGL:', !!document.createElement('canvas').getContext('webgl'));
+  log('getUserMedia:', !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
+  log('UserAgent:', navigator.userAgent);
+})();
+document.getElementById('cam').onclick = async () => {
+  try { const s = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}, audio:false}); v.srcObject=s; log('Camera OK ✅'); }
+  catch(e){ log('Camera ERROR ❌', e.message); }
+};
+</script>
