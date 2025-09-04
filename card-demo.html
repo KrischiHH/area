@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MindAR Card Demo — Guaranteed Match</title>
+  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <style>
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+    #status{position:fixed;top:10px;left:10px;background:rgba(0,0,0,.6);color:#fff;padding:6px 10px;border-radius:10px;font-size:12px;z-index:2}
+    .hud{position:fixed;inset:0;pointer-events:none;display:flex;align-items:flex-end;justify-content:center;
+         background:linear-gradient(180deg,rgba(0,0,0,0) 70%,rgba(0,0,0,.55) 100%);z-index:1}
+    .hud .card{pointer-events:all;margin:16px;padding:12px 14px;border-radius:12px;background:rgba(0,0,0,.65);
+      color:#fff;backdrop-filter:blur(6px)}
+    a{color:#a8d1ff}
+  </style>
+</head>
+<body>
+  <div id="status">BOOTING…</div>
+
+  <a-scene
+    mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind;"
+    color-space="sRGB"
+    renderer="colorManagement: true, physicallyCorrectLights"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: true">
+    <a-assets>
+      <img id="targetImg" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png">
+      <a-asset-item id="model" src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/softmind/scene.gltf"></a-asset-item>
+    </a-assets>
+
+    <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
+
+    <a-entity mindar-image-target="targetIndex: 0">
+      <a-plane src="#targetImg" position="0 0 0" height="0.552" width="1" opacity="0.15"></a-plane>
+      <a-gltf-model src="#model" position="0 0 0.1" scale="0.005 0.005 0.005"
+        animation="property: position; to: 0 0.1 0.1; dur: 1000; easing: easeInOutQuad; loop: true; dir: alternate">
+      </a-gltf-model>
+    </a-entity>
+  </a-scene>
+
+  <div class="hud"><div class="card">
+    <div style="font-weight:600;margin-bottom:6px;">Tipps</div>
+    <div>• Richte die Kamera auf dieses Bild: 
+      <a href="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png" target="_blank">card.png</a>
+      (am Monitor anzeigen oder gedruckt)</div>
+    <div>• Gutes, mattes Licht. Abstand 20–40 cm. Marker vollständig im Bild.</div>
+  </div></div>
+
+  <script>
+    const badge = document.getElementById('status');
+    const scene = document.querySelector('a-scene');
+    scene.addEventListener('arReady', () => badge.textContent = 'AR READY — scan the card.png');
+    scene.addEventListener('arError', (e) => {
+      badge.textContent = 'AR ERROR — ' + (e && e.detail ? e.detail : 'unknown');
+    });
+    document.addEventListener('DOMContentLoaded', () => {
+      const target = document.querySelector('[mindar-image-target]');
+      target.addEventListener('targetFound', () => badge.textContent = 'FOUND ✅');
+      target.addEventListener('targetLost',  () => badge.textContent = 'SEARCHING…');
+    });
+  </script>
+</body>
+</html>
