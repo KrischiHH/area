@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <title>MindAR Image (Start Button)</title>
+    <style>
+      :root{color-scheme:dark}
+      body{margin:0;background:#000}
+      #ui{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:10}
+      button{padding:10px 14px;border-radius:12px;border:1px solid #333;background:#111;color:#fff}
+    </style>
+    <script src="https://aframe.io/releases/1.4.1/aframe.min.js"></script>
+    <script src="https://unpkg.com/mind-ar@1.1.5/dist/mindar-image-aframe.prod.js"></script>
+  </head>
+  <body>
+    <div id="ui"><button onclick="start()">🚀 Start AR</button></div>
+    <script>
+      function start(){
+        const marker = "https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind";
+        const s = document.createElement('a-scene');
+        s.setAttribute('mindar-image', `imageTargetSrc: ${marker}`);
+        s.setAttribute('embedded', '');
+        s.setAttribute('vr-mode-ui', 'enabled: false');
+        s.setAttribute('device-orientation-permission-ui', 'enabled: false');
+
+        const cam = document.createElement('a-camera');
+        cam.setAttribute('position','0 0 0');
+        s.appendChild(cam);
+
+        const anchor = document.createElement('a-entity');
+        anchor.setAttribute('mindar-image-target','targetIndex: 0');
+        const box = document.createElement('a-box');
+        box.setAttribute('position','0 0 0.1');
+        box.setAttribute('depth','0.2'); box.setAttribute('height','0.2'); box.setAttribute('width','0.2');
+        box.setAttribute('color','#4af');
+        anchor.appendChild(box);
+
+        s.appendChild(anchor);
+        document.body.appendChild(s);
+      }
+    </script>
+  </body>
+</html>
