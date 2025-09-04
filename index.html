@@ -5,52 +5,175 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
   <title>ARea – Image Tracking (local)</title>
 
-  <!-- A-Frame 1.4.0 (dein Dateiname) -->
+  <!-- Lokale Libraries (genau so benannt in /lib) -->
   <script src="./lib/aframe-v1.4.0.min.js"></script>
-
-  <!-- MindAR A-Frame Adapter (liegt ebenfalls in /lib) -->
   <script src="./lib/mindar-image-aframe.prod.js"></script>
 
   <style>
-    html,body{margin:0;height:100%;background:#000;font-family:system-ui,-apple-system,Segoe UI,Roboto}
-    .badge{position:fixed;top:10px;left:10px;z-index:20;background:rgba(0,0,0,.6);color:#fff;padding:6px 10px;border-radius:10px;font-size:12px}
-    #tap{position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.5)}
-    .btn{padding:12px 16px;border-radius:12px;background:#111;color:#fff;border:1px solid #333}
+    :root { color-scheme: dark; }
+    html,body { margin:0; height:100%; background:#000; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+    .badge {
+      position: fixed; top: 10px; left: 10px; z-index: 30;
+      background: rgba(0,0,0,.65); color:#fff; padding: 6px 10px; border-radius: 10px; font-size: 12px;
+    }
+    .btn {
+      padding: 10px 14px; border-radius: 12px; background:#111; color:#fff; border:1px solid #333;
+    }
+    #tap {
+      position: fixed; inset: 0; display: none; z-index: 25;
+      align-items: center; justify-content: center; background: rgba(0,0,0,.5); backdrop-filter: blur(4px);
+    }
+    #ui {
+      position: fixed; top: 10px; right: 10px; z-index: 30; display: flex; gap: 8px;
+    }
+    .hint {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+      display: grid; place-items: center; padding: 10px;
+      background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.7) 60%);
+      color:#eee; font-size: 14px;
+    }
+    .hint a { color:#a8d1ff; text-decoration: none; }
   </style>
 </head>
 <body>
   <div id="status" class="badge">BOOTING…</div>
+
+  <!-- Tap-to-start Overlay (iOS & Autoplay-Sperre) -->
   <div id="tap"><button id="start" class="btn">AR STARTEN</button></div>
 
+  <!-- kleine UI rechts oben -->
+  <div id="ui">
+    <button id="switchCam" class="btn">Kamera wechseln</button>
+  </div>
+
+  <!-- A-Frame + MindAR Szene -->
   <a-scene
     mindar-image="imageTargetSrc: ./demo/card.mind; autoStart: true;"
-    vr-mode-ui="enabled:false"
-    device-orientation-permission-ui="enabled:true">
-    <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
-    <a-entity mindar-image-target="targetIndex:0">
-      <a-box position="0 0 0.05" width="0.15" height="0.15" depth="0.15" color="#4CC3D9"></a-box>
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: true"
+    renderer="colorManagement: true, physicallyCorrectLights: true">
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+    <!-- Inhalt auf Marker #0 -->
+    <a-entity mindar-image-target="targetIndex: 0">
+      <a-box position="0 0 0.05" width="0.15" height="0.15" depth="0.15" color="#4CC3D9"
+             animation="property: position; to: 0 0.18 0.05; dur: 900; dir: alternate; loop: true; easing: easeInOutQuad"></a-box>
     </a-entity>
   </a-scene>
 
+  <!-- Hinweise unten -->
+  <div class="hint">
+    <div>• Kamera erlauben. Marker komplett im Bild halten (20–40 cm, mattes Licht).</div>
+    <div>• Testmarker öffnen: <a href="./demo/card.png" target="_blank" rel="noopener">card.png</a></div>
+  </div>
+
   <script>
-    const scene=document.querySelector('a-scene'), badge=document.getElementById('status'),
-          tap=document.getElementById('tap'), btn=document.getElementById('start');
+    // ===== UI & Status =====
+    const scene = document.querySelector('a-scene');
+    const badge = document.getElementById('status');
+    const tap   = document.getElementById('tap');
+    const btnStart = document.getElementById('start');
+    const btnSwitch = document.getElementById('switchCam');
 
-    // Falls Autostart blockiert ist → Button einblenden
-    setTimeout(()=>{ if(badge.textContent.startsWith('BOOTING')) tap.style.display='flex'; },1200);
+    // Autostart-Fallback (iOS & manche Androids)
+    setTimeout(() => {
+      if (badge.textContent.startsWith('BOOTING')) tap.style.display = 'flex';
+    }, 1200);
 
-    btn.addEventListener('click', async ()=>{
-      try{
-        const sys=scene.systems['mindar-image-system'];
-        if(!sys){ badge.textContent='START ERROR — MindAR-System fehlt (Script 404?)'; return; }
-        await sys.start();
-        tap.style.display='none';
-        badge.textContent='STARTED — scanne /demo/card.png';
-      }catch(e){ badge.textContent='START ERROR — '+(e?.message||e); }
+    // ===== Kamera Handling =====
+    let cams = [], camIndex = 0, starting = false;
+
+    async function listCameras() {
+      try {
+        // Permission anstoßen, damit Labels kommen
+        await navigator.mediaDevices.getUserMedia({ video:true, audio:false }).catch(()=>{});
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        cams = devices.filter(d => d.kind === 'videoinput');
+        if (!cams.length) throw new Error('Keine Kamera gefunden');
+      } catch (e) {
+        console.warn(e);
+        badge.textContent = 'Kamera nicht verfügbar oder blockiert';
+      }
+    }
+
+    async function startWithDeviceId(deviceId, labelHint) {
+      const sys = scene.systems['mindar-image-system'];
+      if (!sys) { badge.textContent = 'START ERROR — MindAR-System fehlt (Script/404?)'; return; }
+      if (starting) return;
+      starting = true;
+      try {
+        // ggf. vorherigen Stream stoppen
+        if (sys._started || sys.started) { try { await sys.stop(); } catch(_){} }
+
+        // einige Builds akzeptieren { deviceId }, andere nur getUserMedia-ähnlich
+        try {
+          await sys.start({ deviceId });
+        } catch {
+          await sys.start({ video: { deviceId: { exact: deviceId } } });
+        }
+
+        tap.style.display = 'none';
+        const label = labelHint || (cams.find(c => c.deviceId === deviceId)?.label || 'Kamera');
+        badge.textContent = 'AR READY — ' + label + ' (scanne ./demo/card.png)';
+      } catch (e) {
+        console.error(e);
+        tap.style.display = 'flex';
+        badge.textContent = 'START ERROR — ' + (e?.message || e);
+      } finally {
+        starting = false;
+      }
+    }
+
+    async function startPreferred() {
+      await listCameras();
+      if (!cams.length) return;
+      // bevorzugt Back/Environment
+      const envIdx = cams.findIndex(c => /back|rear|environment/i.test(c.label));
+      camIndex = envIdx >= 0 ? envIdx : 0;
+      await startWithDeviceId(cams[camIndex].deviceId);
+    }
+
+    btnStart.addEventListener('click', startPreferred);
+
+    btnSwitch.addEventListener('click', async () => {
+      if (!cams.length) await listCameras();
+      if (!cams.length) return;
+      camIndex = (camIndex + 1) % cams.length;
+      const cam = cams[camIndex];
+      await startWithDeviceId(cam.deviceId, 'wechsel: ' + (cam.label || 'Cam ' + camIndex));
     });
 
-    scene.addEventListener('arReady', ()=>{ tap.style.display='none'; badge.textContent='AR READY — scanne /demo/card.png'; });
-    scene.addEventListener('arError',  e=>{ tap.style.display='flex'; badge.textContent='AR ERROR — '+(e?.detail||'Unbekannt'); });
+    // ===== MindAR Events =====
+    scene.addEventListener('arReady', () => {
+      tap.style.display = 'none';
+      if (!badge.textContent.includes('AR READY')) badge.textContent = 'AR READY — scanne ./demo/card.png';
+    });
+    scene.addEventListener('arError', (e) => {
+      tap.style.display = 'flex';
+      badge.textContent = 'AR ERROR — ' + (e && e.detail ? e.detail : 'Unbekannter Fehler');
+    });
+
+    // ===== Sanity-Check: sind alle lokalen Dateien da? =====
+    (async () => {
+      const base = location.pathname.replace(/\/[^/]*$/, '');
+      const urls = [
+        `${base}/lib/aframe-v1.4.0.min.js`,
+        `${base}/lib/mindar-image-aframe.prod.js`,
+        `${base}/lib/controller.worker.js`,
+        `${base}/lib/opencv.js`,
+        `${base}/lib/opencv-wasm.js`,
+        `${base}/demo/card.mind`,
+        `${base}/demo/card.png`,
+      ];
+      try {
+        const results = await Promise.all(urls.map(u => fetch(u, {cache:'no-store'}).then(r => r.ok)));
+        const badIdx = results.findIndex(ok => !ok);
+        if (badIdx >= 0) {
+          badge.textContent = 'FEHLT/404: ' + urls[badIdx];
+          tap.style.display = 'flex';
+        }
+      } catch (_) {}
+    })();
   </script>
 </body>
 </html>
