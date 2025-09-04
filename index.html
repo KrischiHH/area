@@ -4,8 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
   <title>ARea – Image Tracking (local)</title>
-  <script src="./lib/aframe.min.js"></script>
+
+  <!-- A-Frame 1.4.0 (dein Dateiname) -->
+  <script src="./lib/aframe-v1.4.0.min.js"></script>
+
+  <!-- MindAR A-Frame Adapter (liegt ebenfalls in /lib) -->
   <script src="./lib/mindar-image-aframe.prod.js"></script>
+
   <style>
     html,body{margin:0;height:100%;background:#000;font-family:system-ui,-apple-system,Segoe UI,Roboto}
     .badge{position:fixed;top:10px;left:10px;z-index:20;background:rgba(0,0,0,.6);color:#fff;padding:6px 10px;border-radius:10px;font-size:12px}
@@ -17,8 +22,10 @@
   <div id="status" class="badge">BOOTING…</div>
   <div id="tap"><button id="start" class="btn">AR STARTEN</button></div>
 
-  <a-scene mindar-image="imageTargetSrc: ./demo/card.mind; autoStart: true;"
-           vr-mode-ui="enabled:false" device-orientation-permission-ui="enabled:true">
+  <a-scene
+    mindar-image="imageTargetSrc: ./demo/card.mind; autoStart: true;"
+    vr-mode-ui="enabled:false"
+    device-orientation-permission-ui="enabled:true">
     <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
     <a-entity mindar-image-target="targetIndex:0">
       <a-box position="0 0 0.05" width="0.15" height="0.15" depth="0.15" color="#4CC3D9"></a-box>
@@ -28,15 +35,20 @@
   <script>
     const scene=document.querySelector('a-scene'), badge=document.getElementById('status'),
           tap=document.getElementById('tap'), btn=document.getElementById('start');
+
+    // Falls Autostart blockiert ist → Button einblenden
     setTimeout(()=>{ if(badge.textContent.startsWith('BOOTING')) tap.style.display='flex'; },1200);
+
     btn.addEventListener('click', async ()=>{
       try{
         const sys=scene.systems['mindar-image-system'];
-        if(!sys){ badge.textContent='START ERROR — MindAR System fehlt (Script/404?)'; return; }
-        await sys.start(); tap.style.display='none';
+        if(!sys){ badge.textContent='START ERROR — MindAR-System fehlt (Script 404?)'; return; }
+        await sys.start();
+        tap.style.display='none';
         badge.textContent='STARTED — scanne /demo/card.png';
       }catch(e){ badge.textContent='START ERROR — '+(e?.message||e); }
     });
+
     scene.addEventListener('arReady', ()=>{ tap.style.display='none'; badge.textContent='AR READY — scanne /demo/card.png'; });
     scene.addEventListener('arError',  e=>{ tap.style.display='flex'; badge.textContent='AR ERROR — '+(e?.detail||'Unbekannt'); });
   </script>
