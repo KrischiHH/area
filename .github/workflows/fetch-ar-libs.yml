@@ -1,4 +1,4 @@
-name: Fetch AR libs (npm tarballs)
+name: Fetch AR libs (via checkout)
 
 on:
   workflow_dispatch:
@@ -11,40 +11,50 @@ jobs:
   fetch:
     runs-on: ubuntu-latest
     steps:
+      # Dein Repo
       - uses: actions/checkout@v4
 
-      - name: Make folders
+      # A-Frame v1.4.0 direkt aus dem offiziellen Repo holen
+      - name: Checkout A-Frame
+        uses: actions/checkout@v4
+        with:
+          repository: aframevr/aframe
+          ref: v1.4.0
+          path: vendor/aframe
+
+      # MindAR 1.2.5 direkt aus dem offiziellen Repo holen
+      - name: Checkout MindAR
+        uses: actions/checkout@v4
+        with:
+          repository: hiukim/mind-ar-js
+          ref: 1.2.5
+          path: vendor/mindar
+
+      # Dateien in dein Repo kopieren
+      - name: Copy libs + demo
         run: |
-          set -e
-          mkdir -p lib demo tmp
+          set -euxo pipefail
+          mkdir -p lib demo
           echo "" > .nojekyll
 
-      - name: Download tarballs from npm
-        run: |
-          set -euxo pipefail
-          curl -L --fail "https://registry.npmjs.org/aframe/-/aframe-1.4.0.tgz" -o tmp/aframe.tgz
-          curl -L --fail "https://registry.npmjs.org/mind-ar/-/mind-ar-1.2.5.tgz" -o tmp/mindar.tgz
-
-      - name: Extract and copy needed files
-        run: |
-          set -euxo pipefail
-          tar -xzf tmp/aframe.tgz -C tmp
-          tar -xzf tmp/mindar.tgz -C tmp
           # A-Frame
-          cp -v tmp/package/dist/aframe.min.js lib/aframe.min.js
-          # MindAR (A-Frame adapter + worker + wasm)
-          cp -v tmp/package/dist/mindar-image-aframe.prod.js lib/mindar-image-aframe.prod.js
-          cp -v tmp/package/dist/mindar-image-worker.js     lib/mindar-image-worker.js
-          cp -v tmp/package/dist/mindar-image-wasm.wasm     lib/mindar-image-wasm.wasm
-          # Demo marker
-          cp -v tmp/package/examples/image-tracking/assets/card-example/card.mind demo/card.mind
-          cp -v tmp/package/examples/image-tracking/assets/card-example/card.png  demo/card.png
+          cp -v vendor/aframe/dist/aframe.min.js lib/aframe.min.js
 
+          # MindAR (Adapter + Worker + WASM)
+          cp -v vendor/mindar/dist/mindar-image-aframe.prod.js lib/mindar-image-aframe.prod.js
+          cp -v vendor/mindar/dist/mindar-image-worker.js     lib/mindar-image-worker.js
+          cp -v vendor/mindar/dist/mindar-image-wasm.wasm     lib/mindar-image-wasm.wasm
+
+          # Demo-Marker
+          cp -v vendor/mindar/examples/image-tracking/assets/card-example/card.mind demo/card.mind
+          cp -v vendor/mindar/examples/image-tracking/assets/card-example/card.png  demo/card.png
+
+      # PR statt Direkt-Push (funktioniert auch mit geschütztem main)
       - name: Create PR with fetched files
         uses: peter-evans/create-pull-request@v6
         with:
-          commit-message: "Add AR libs from npm tarballs: /lib and /demo (+.nojekyll)"
-          title: "Add local AR libraries (A-Frame + MindAR) and demo marker"
-          body: "Files pulled from npm tarballs to avoid flaky CDNs. Adds /lib (aframe+mindar) and /demo (card)."
+          commit-message: "Add local AR libs (A-Frame v1.4.0 + MindAR 1.2.5) and demo marker"
+          title: "Add local AR libs"
+          body: "Files copied via actions/checkout from upstream repos. Adds /lib, /demo and .nojekyll."
           branch: chore/add-ar-libs
           delete-branch: true
