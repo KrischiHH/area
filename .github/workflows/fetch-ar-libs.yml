@@ -3,6 +3,9 @@ name: Fetch AR libs
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write   # ← wichtig: erlaubt Commit/Push
+
 jobs:
   fetch:
     runs-on: ubuntu-latest
@@ -17,15 +20,15 @@ jobs:
       - name: Fetch A-Frame + MindAR + Demo marker
         run: |
           set -e
-          # A-Frame (bewährt mit MindAR)
+          # A-Frame
           curl -L --fail "https://aframe.io/releases/1.4.0/aframe.min.js" -o lib/aframe.min.js
 
-          # MindAR (A-Frame-Adapter, Worker, WASM) – GitHub-Repo (stabil)
+          # MindAR (Adapter + Worker + WASM) – GitHub Mirror (stabil)
           curl -L --fail "https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/dist/mindar-image-aframe.prod.js" -o lib/mindar-image-aframe.prod.js
           curl -L --fail "https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/dist/mindar-image-worker.js"     -o lib/mindar-image-worker.js
           curl -L --fail "https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/dist/mindar-image-wasm.wasm"     -o lib/mindar-image-wasm.wasm
 
-          # Demo-Marker (zum ersten Test)
+          # Demo-Marker
           curl -L --fail "https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind" -o demo/card.mind
           curl -L --fail "https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png"  -o demo/card.png
 
