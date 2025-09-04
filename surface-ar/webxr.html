@@ -30,6 +30,14 @@
       scene = new THREE.Scene();
       camera = new THREE.PerspectiveCamera();
 
+      // Grundbeleuchtung
+      const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1.2);
+      scene.add(hemi);
+      const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+      dir.position.set(0, 6, 0);
+      scene.add(dir);
+
+
       renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(window.innerWidth, window.innerHeight);
