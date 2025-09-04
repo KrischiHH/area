@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"/>
+  <title>MindAR Starter – Image (A-Frame)</title>
+  <style>
+    :root{color-scheme:dark}
+    html,body{margin:0;height:100%;background:#000}
+    #ui{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9}
+    #ui button{padding:10px 14px;border-radius:12px;border:1px solid #333;background:#111;color:#fff}
+    #hint{position:fixed;right:10px;bottom:10px;color:#fff;background:rgba(0,0,0,.6);padding:8px 10px;border-radius:10px;font:12px/1.3 system-ui;z-index:9}
+    #target{position:fixed;right:10px;top:10px;z-index:9;background:#111;border:1px solid #222;border-radius:10px;padding:6px}
+    #target > div{color:#bbb;font:12px/1.2 system-ui;margin-bottom:4px}
+  </style>
+
+  <!-- A-Frame + MindAR UMD (stabile Kombination ohne Build-Tools) -->
+  <script src="https://aframe.io/releases/1.4.1/aframe.min.js"></script>
+  <script src="https://unpkg.com/mind-ar@1.1.5/dist/mindar-image-aframe.prod.js"></script>
+</head>
+<body>
+
+  <div id="ui"><button onclick="start()">🚀 AR starten</button></div>
+  <div id="target"><div>Target Preview:</div>
+    <img src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png" width="140"/>
+  </div>
+  <div id="hint">Tipps: • HTTPS • Kamera erlauben • keine anderen AR-/Kamera-Tabs offen</div>
+
+  <script>
+    // Minimaler Start – genau wie im MindAR-Starter
+    function start(){
+      const marker = "https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind";
+
+      const scene = document.createElement('a-scene');
+      scene.setAttribute('mindar-image', `imageTargetSrc: ${marker}`);
+      scene.setAttribute('embedded', '');
+      scene.setAttribute('vr-mode-ui', 'enabled: false');
+      scene.setAttribute('device-orientation-permission-ui', 'enabled: false');
+
+      // Kamera
+      const camera = document.createElement('a-camera');
+      camera.setAttribute('position', '0 0 0');
+      scene.appendChild(camera);
+
+      // Anker + einfaches 3D-Objekt (Würfel) – garantiert ohne CORS
+      const anchor = document.createElement('a-entity');
+      anchor.setAttribute('mindar-image-target', 'targetIndex: 0');
+
+      const box = document.createElement('a-box');
+      box.setAttribute('position', '0 0 0.1');
+      box.setAttribute('depth', '0.2');
+      box.setAttribute('height', '0.2');
+      box.setAttribute('width', '0.2');
+      box.setAttribute('color', '#4af');
+
+      anchor.appendChild(box);
+      scene.appendChild(anchor);
+
+      document.body.appendChild(scene);
+    }
+  </script>
+</body>
+</html>
