@@ -2,27 +2,21 @@
 <html lang="de">
 <head>
   <meta charset="utf-8" />
-  <title>ARea – Image AR (stabil)</title>
+  <title>ARea – Image AR</title>
   <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
-  <!-- Offizielle, bewährte CDNs -->
+  <!-- Offizielle, stabile CDNs laut MindAR-Doku -->
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
   <style>
     html,body{margin:0;height:100%;background:#000;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-    .badge{position:fixed;top:10px;left:10px;z-index:20;background:rgba(0,0,0,.6);color:#fff;padding:6px 10px;border-radius:10px;font-size:12px}
-    #tap{position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.6);backdrop-filter:blur(6px)}
-    .btn{padding:12px 16px;border-radius:12px;background:#111;color:#fff;border:1px solid #333}
-    .log{position:fixed;bottom:8px;left:8px;right:8px;z-index:25;background:rgba(0,0,0,.55);color:#ddd;font-size:11px;padding:6px 8px;border-radius:8px;max-height:35vh;overflow:auto}
+    .badge{position:fixed;top:10px;left:10px;z-index:10;background:rgba(0,0,0,.6);color:#fff;padding:6px 10px;border-radius:10px;font-size:12px}
   </style>
 </head>
 <body>
-  <div id="s" class="badge">BOOTING…</div>
-  <div id="tap"><button id="start" class="btn">AR STARTEN</button></div>
-  <div id="log" class="log" style="display:none"></div>
+  <div class="badge" id="s">BOOTING…</div>
 
-  <!-- Exakt die offizielle Demo-Konfiguration -->
   <a-scene
-    mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind; autoStart: true;"
+    mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind;"
     color-space="sRGB"
     renderer="colorManagement: true, physicallyCorrectLights"
     vr-mode-ui="enabled: false"
@@ -38,54 +32,15 @@
     <a-entity mindar-image-target="targetIndex: 0">
       <a-plane src="#card" position="0 0 0" height="0.552" width="1"></a-plane>
       <a-gltf-model src="#avatarModel" position="0 0 0.1" scale="0.005 0.005 0.005"
-                    animation="property: position; to: 0 0.1 0.1; dur: 1000; easing: easeInOutQuad; loop: true; dir: alternate">
+        animation="property: position; to: 0 0.1 0.1; dur: 1000; easing: easeInOutQuad; loop: true; dir: alternate">
       </a-gltf-model>
     </a-entity>
   </a-scene>
 
   <script>
-    // — Mini-Diagnose —
-    const s = document.getElementById('s');
-    const tap = document.getElementById('tap');
-    const btn = document.getElementById('start');
-    const log = document.getElementById('log');
-    const scene = document.querySelector('a-scene');
-    const L = (...a)=>{ log.style.display='block'; log.textContent += a.join(' ') + '\n'; };
-
-    window.addEventListener('error', e => L('onerror:', e.message || e));
-    window.addEventListener('unhandledrejection', e => L('unhandled:', (e.reason && e.reason.message) || e.reason || e));
-
-    (async () => {
-      try {
-        // Prüfe, ob die Skripte wirklich geladen wurden
-        L('A-Frame loaded:', !!window.AFRAME);
-        L('MindAR adapter:', !!AFRAME?.systems?.['mindar-image-system']);
-        // Prüfe, ob die CDN-Worker/WASM erreichbar sind (nur HEAD)
-        const base = 'https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/dist';
-        for (const f of ['mindar-image-worker.js','mindar-image-wasm.wasm']) {
-          try {
-            const r = await fetch(`${base}/${f}`, {method:'HEAD'});
-            L(f, r.ok ? 'OK' : ('HTTP '+r.status));
-          } catch(e){ L(f, 'FEHLER', e.message); }
-        }
-      } catch(e){ L('Diag init error:', e.message); }
-    })();
-
-    // Autostart-Fallback per Tap
-    setTimeout(()=>{ if (s.textContent.startsWith('BOOTING')) tap.style.display = 'flex'; }, 1200);
-    btn.addEventListener('click', async () => {
-      try {
-        await scene.systems['mindar-image-system'].start();
-        tap.style.display = 'none';
-        s.textContent = 'STARTED — scanne die card.png';
-      } catch(e) {
-        s.textContent = 'START ERROR — ' + (e?.message || e);
-        L('start() error:', e?.message || e);
-      }
-    });
-
-    scene.addEventListener('arReady',  () => { tap.style.display='none'; s.textContent='AR READY — scanne card.png'; L('arReady'); });
-    scene.addEventListener('arError',  e => { tap.style.display='flex'; s.textContent='AR ERROR — '+(e?.detail||'Unbekannt'); L('arError:', e?.detail); });
+    const s=document.getElementById('s'), sc=document.querySelector('a-scene');
+    sc.addEventListener('arReady', ()=> s.textContent='AR READY — scanne card.png');
+    sc.addEventListener('arError', e=> s.textContent='AR ERROR — '+(e?.detail||'Unbekannt'));
   </script>
 </body>
 </html>
