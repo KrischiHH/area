@@ -1,4 +1,4 @@
-name: Fetch AR libs (npm pack)
+name: Fetch AR libs (zip tags)
 
 on:
   workflow_dispatch:
@@ -13,38 +13,38 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Node (for npm pack)
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Fetch from npm tarballs
+      - name: Prepare folders
         run: |
           set -euxo pipefail
           mkdir -p lib demo tmp
           echo "" > .nojekyll
-          cd tmp
-          # Pack tarballs from npm (stable)
-          AF_TGZ=$(npm pack aframe@1.4.0 | tail -n1)
-          MA_TGZ=$(npm pack mind-ar@1.2.5 | tail -n1)
-          mkdir aframe mindar
-          tar -xzf "$AF_TGZ" -C aframe
-          tar -xzf "$MA_TGZ" -C mindar
-          # Copy libs
-          cp -v aframe/package/dist/aframe.min.js                           ../lib/aframe.min.js
-          cp -v mindar/package/dist/mindar-image-aframe.prod.js             ../lib/mindar-image-aframe.prod.js
-          cp -v mindar/package/dist/mindar-image-worker.js                  ../lib/mindar-image-worker.js
-          cp -v mindar/package/dist/mindar-image-wasm.wasm                  ../lib/mindar-image-wasm.wasm
+
+      - name: Download release ZIPs from github.com
+        run: |
+          set -euxo pipefail
+          curl -L --fail "https://github.com/aframevr/aframe/archive/refs/tags/v1.4.0.zip" -o tmp/aframe.zip
+          curl -L --fail "https://github.com/hiukim/mind-ar-js/archive/refs/tags/1.2.5.zip" -o tmp/mindar.zip
+
+      - name: Unzip and copy files
+        run: |
+          set -euxo pipefail
+          unzip -q tmp/aframe.zip -d tmp/aframe
+          unzip -q tmp/mindar.zip -d tmp/mindar
+          # A-Frame
+          cp -v tmp/aframe/aframe-1.4.0/dist/aframe.min.js lib/aframe.min.js
+          # MindAR (Adapter + Worker + WASM)
+          cp -v tmp/mindar/mind-ar-js-1.2.5/dist/mindar-image-aframe.prod.js lib/mindar-image-aframe.prod.js
+          cp -v tmp/mindar/mind-ar-js-1.2.5/dist/mindar-image-worker.js     lib/mindar-image-worker.js
+          cp -v tmp/mindar/mind-ar-js-1.2.5/dist/mindar-image-wasm.wasm     lib/mindar-image-wasm.wasm
           # Demo marker
-          cp -v mindar/package/examples/image-tracking/assets/card-example/card.mind ../demo/card.mind
-          cp -v mindar/package/examples/image-tracking/assets/card-example/card.png  ../demo/card.png
-          cd ..
+          cp -v tmp/mindar/mind-ar-js-1.2.5/examples/image-tracking/assets/card-example/card.mind demo/card.mind
+          cp -v tmp/mindar/mind-ar-js-1.2.5/examples/image-tracking/assets/card-example/card.png  demo/card.png
 
       - name: Create PR with fetched files
         uses: peter-evans/create-pull-request@v6
         with:
           commit-message: "Add local AR libs (A-Frame 1.4.0 + MindAR 1.2.5) and demo marker"
           title: "Add local AR libs"
-          body: "Libraries added via npm pack. Adds /lib, /demo and .nojekyll."
+          body: "Copies from official tag ZIPs on github.com. Adds /lib, /demo and .nojekyll."
           branch: chore/add-ar-libs
           delete-branch: true
