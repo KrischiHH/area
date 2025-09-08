@@ -2,42 +2,68 @@
 <html lang="de">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-  <title>Image AR – stabil (A-Frame + MindAR + DOM-Video)</title>
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=overlays-content"
+  />
+  <title>Image Viewer – AR (view-only, responsive)</title>
   <style>
+    *,*::before,*::after{box-sizing:border-box}
     html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:system-ui;color:#fff}
     /* VR-Button sicher ausblenden */
-    .a-enter-vr-button, .a-enter-vr { display:none !important; }
+    .a-enter-vr-button,.a-enter-vr{display:none!important}
 
-    /* Ebenen: 0 Video, 1 Canvas, 2 UI/Hints, 3 Intro-Overlay */
-    #videoLayer{position:fixed;inset:0;z-index:0}
-    #videoLayer video{position:absolute;inset:0;width:100vw;height:100dvh;object-fit:cover}
-    a-scene{position:fixed;inset:0;z-index:1}
+    /* Ebenen: 0 Video, 1 Canvas, 2 Hint, 3 Intro */
+    #videoLayer{
+      position:fixed; inset:0; z-index:0;
+      /* hält immer die volle Viewportfläche – unabhängig von Adressleisten */
+      width:100vw; height:100dvh;
+    }
+    #videoLayer video{
+      position:absolute; inset:0;
+      width:100%; height:100%;
+      object-fit:cover; object-position:center;
+      transform:none !important; /* falls Browser Effekte setzen */
+    }
+    a-scene{position:fixed; inset:0; z-index:1}
 
-    /* kleines Hinweisbild oben rechts – erst nach Start sichtbar */
-    #hint{ display:none; position:fixed; right:12px; top:12px; z-index:2; pointer-events:none }
-    #hint img{ width:160px; height:auto; border-radius:12px; opacity:.9; display:block }
+    /* Hinweisbild oben rechts – mit Safe-Area-Padding, nie abgeschnitten */
+    #hint{
+      position:fixed;
+      right: max(12px, env(safe-area-inset-right));
+      top:   max(12px, env(safe-area-inset-top));
+      z-index:2; pointer-events:none; display:none;
+    }
+    #hint img{
+      /* passt sich dem Gerät an, ohne zu groß zu werden */
+      width: min(28vw, 180px); height:auto;
+      border-radius:12px; opacity:.9; display:block;
+      box-shadow:0 6px 18px rgba(0,0,0,.35);
+    }
 
-    /* kleines Log (zum Debuggen) */
-    #log{position:fixed;left:12px;top:12px;z-index:2;background:rgba(0,0,0,.55);
-         padding:8px 10px;border-radius:8px;font:12px/1.3 monospace}
-
-    /* Start-Overlay: wirklich zentriert + Safe-Area */
+    /* Start-Overlay – wirklich zentriert und sicher gegen Safe-Area/Adressleisten */
     #intro{
       position:fixed; inset:0; z-index:3; display:grid; place-items:center;
-      padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)) 16px;
+      padding:
+        max(16px, env(safe-area-inset-top))
+        max(16px, env(safe-area-inset-right))
+        max(16px, env(safe-area-inset-bottom))
+        max(16px, env(safe-area-inset-left));
       background:linear-gradient(180deg,rgba(0,0,0,.6),rgba(0,0,0,.35));
     }
     #intro .card{
-      width:min(92vw,520px);
-      max-height:min(80dvh,680px);
+      width:min(92vw, 520px);
+      max-height:min(80svh, 680px); /* svh = stabil gegen Adressleisten-Jumps */
       display:flex; flex-direction:column; gap:10px;
       border-radius:16px; padding:16px; box-sizing:border-box;
       background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.15);
+      box-shadow:0 10px 30px rgba(0,0,0,.35);
     }
-    #intro .card img{ width:100%; max-height:48dvh; object-fit:cover; border-radius:12px }
-    #intro .card h2{ margin:6px 0 0; font-size:18px }
-    #intro .card p{ margin:0 0 10px; opacity:.85 }
+    #intro .card img{
+      width:100%; max-height:48svh; object-fit:cover; border-radius:12px
+    }
+    #intro .card h2{margin:6px 0 0; font-size:18px}
+    #intro .card p{margin:0 0 10px; opacity:.85}
     #intro .card button{
       padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,.25);
       background:#111; color:#fff; width:100%;
@@ -47,26 +73,27 @@
   <!-- A-Frame + MindAR (bewährte Versionen) -->
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-  <!-- Animationen für GLB -->
+  <!-- Animationen für GLB (falls Clips vorhanden) -->
   <script src="https://unpkg.com/aframe-extras@6.1.1/dist/aframe-extras.min.js"></script>
 </head>
 <body>
-  <!-- 0) echter Kamera-Stream (wird zur Laufzeit hier eingehängt) -->
+  <!-- 0) echter Kamera-Stream (wird beim Start hier eingehängt) -->
   <div id="videoLayer"></div>
 
-  <!-- 1) AR-Szene (transparent, damit das Video dahinter sichtbar ist) -->
+  <!-- 1) AR-Szene (transparent: Video scheint durch) -->
   <a-scene
-    mindar-image="imageTargetSrc: ../assets/targets/targets_2.mind?v=12; uiScanning: true; uiLoading: true"
+    mindar-image="imageTargetSrc: ../assets/targets/target_2.mind?v=14; uiScanning: true; uiLoading: true"
     embedded
     renderer="alpha:true; antialias:true"
     vr-mode-ui="enabled:false"
     device-orientation-permission-ui="enabled:true">
 
+    <!-- Kamera fix, keine Look-Controls = view-only -->
     <a-camera look-controls="enabled:false"></a-camera>
 
     <!-- 3D-Content auf Target 0 -->
     <a-entity id="marker" mindar-image-target="targetIndex: 0">
-      <!-- Demo-GLB: ersetze src durch dein eigenes Modell, z. B. ../assets/models/deinmodell.glb -->
+      <!-- Demo-GLB: ersetze src durch dein Modell -->
       <a-gltf-model id="model"
         src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
         position="0 0 0.05" scale="0.6 0.6 0.6"
@@ -75,24 +102,22 @@
     </a-entity>
   </a-scene>
 
-  <!-- 2) kleines Hinweisbild (wird nach Start bis targetFound gezeigt) -->
+  <!-- 2) Kleiner Hinweis während des Suchens -->
   <div id="hint">
     <img src="/area/assets/targets/target.png?v=1" alt="Referenzbild">
   </div>
-  <div id="log">Bereit…</div>
 
-  <!-- 3) Start-Overlay mit OK-Button -->
+  <!-- 3) Start-Overlay (User tippt OK, dann startet Scanner) -->
   <div id="intro" role="dialog" aria-modal="true">
     <div class="card">
       <img src="/area/assets/targets/target.png?v=1" alt="Zu scannendes Bild">
-      <h2>Finde & scanne dieses Bild</h2>
+      <h2>Finde &amp; scanne dieses Bild</h2>
       <p>Tippe auf „OK“, um die Kamera zu starten. Richte sie auf das Bild – dann startet die AR-Szene.</p>
       <button id="startBtn">OK – Scanner starten</button>
     </div>
   </div>
 
   <script>
-    const log    = t => { document.getElementById('log').textContent = t; console.log(t); };
     const scene  = document.querySelector('a-scene');
     const layer  = document.getElementById('videoLayer');
     const hint   = document.getElementById('hint');
@@ -100,49 +125,50 @@
     const marker = document.getElementById('marker');
     const startBtn = document.getElementById('startBtn');
 
-    // Kamera-Video von MindAR ins DOM ziehen (hinter die Canvas)
+    // MindAR-Video ins DOM (hinter die Canvas) – ohne feste Pixelmaße (CSS regelt Größe!)
     function attachVideoWhenReady(){
       const v = document.getElementById('mindar-image-video') || document.querySelector('video');
       if (!v) { requestAnimationFrame(attachVideoWhenReady); return; }
       v.setAttribute('playsinline',''); v.muted = true; v.autoplay = true;
-      if (v.parentElement !== layer) { layer.innerHTML=''; layer.appendChild(v); }
-      Object.assign(v.style, {position:'absolute', inset:'0', width:'100vw', height:'100dvh', objectFit:'cover'});
-      log('Video gebunden');
+      if (v.parentElement !== layer) { layer.replaceChildren(v); }
+      // Größe NICHT inline setzen – CSS (#videoLayer/#videoLayer video) hält es immer fullscreen
     }
 
+    // Auf dynamische Viewport-Änderung reagieren (Adressleisten fahren ein/aus)
+    addEventListener('resize', ()=>{
+      // CSS erledigt die Größe – wir triggern nur das Re-Layout minimal
+      const v = layer.querySelector('video'); if (v) v.style.transform = 'translateZ(0)';
+      requestAnimationFrame(()=>{ if (v) v.style.transform = ''; });
+    });
+
+    // MindAR erst nach Tap starten (view-only flow)
     let mindarSys = null;
     scene.addEventListener('loaded', () => {
       mindarSys = scene.systems['mindar-image-system'];
-      // Falls MindAR sofort startet, versuchen wir es direkt zu stoppen,
-      // damit der Start erst nach Tap erfolgt (nicht kritisch, daher try/catch).
       try { mindarSys && mindarSys.stop && mindarSys.stop(); } catch(_) {}
     });
 
-    // Start per Tap
     startBtn.addEventListener('click', async ()=>{
       intro.style.display = 'none';
       try {
-        if (mindarSys && mindarSys.start) { await mindarSys.start(); }
-        // Video einhängen + kleinen Hinweis oben rechts anzeigen
+        if (mindarSys && mindarSys.start) await mindarSys.start();
         setTimeout(attachVideoWhenReady, 200);
-        hint.style.display = 'block';
-        log('AR gestartet');
+        hint.style.display = 'block';  // bis Target gefunden
       } catch(e){
-        log('Start-Fehler: '+e);
-        alert('Start fehlgeschlagen: '+e);
+        alert('Start fehlgeschlagen: ' + e);
         intro.style.display = 'grid';
       }
     });
 
-    // Fallback: Sobald MindAR „ready“ ist, Videolayer binden (falls Start schon aktiv war)
+    // Fallback: sobald MindAR ready → Videolayer binden
     scene.addEventListener('arReady', () => {
-      if (intro.style.display !== 'none') return; // wir warten auf den Button
+      if (intro.style.display !== 'none') return;
       attachVideoWhenReady();
     });
 
     // Hinweisbild ein/aus je nach Tracking
-    marker.addEventListener('targetFound', ()=>{ hint.style.display='none'; log('targetFound'); });
-    marker.addEventListener('targetLost',  ()=>{ hint.style.display='block'; log('targetLost'); });
+    marker.addEventListener('targetFound', ()=>{ hint.style.display='none'; });
+    marker.addEventListener('targetLost',  ()=>{ hint.style.display='block'; });
   </script>
 </body>
 </html>
