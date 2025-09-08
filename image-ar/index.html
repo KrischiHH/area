@@ -3,45 +3,73 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Image AR – MindAR + A-Frame (stable)</title>
-  <!-- Bewährte Kombination -->
-  <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-  <style>
-    html,body{margin:0;height:100%;background:#000}
-    a-scene{position:fixed;inset:0} /* sichert Vollbild-Rendering */
-  </style>
+  <title>Image AR – MindAR + Three</title>
+  <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}</style>
+
+  <!-- Importmap: Three.js + MindAR (Three-Bundle) -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
+    }
+  }
+  </script>
 </head>
 <body>
-  <a-scene
-    mindar-image="imageTargetSrc: ../assets/targets/target.mind?v=3; uiScanning: true; uiLoading: true"
-    embedded
-    renderer="alpha:true; antialias:true"
-    vr-mode-ui="enabled:false"
-    device-orientation-permission-ui="enabled:true">
-
-    <a-camera look-controls="enabled:false"></a-camera>
-
-    <a-entity mindar-image-target="targetIndex: 0">
-      <!-- Testobjekt -->
-      <a-box position="0 0 0" depth="0.5" height="0.5" width="0.5" color="#4FC3F7"></a-box>
-      <!-- Beispiel GLB:
-      <a-gltf-model src="../assets/models/sample.glb" position="0 0 0" scale="0.2 0.2 0.2"></a-gltf-model>
-      -->
-    </a-entity>
-  </a-scene>
-
-  <!-- Diagnose & Kamera-Switch -->
-  <button id="switchCam" style="position:fixed;right:12px;bottom:12px;z-index:11;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.2);background:#111;color:#fff;">
+  <button id="switchCam" style="position:fixed;right:12px;bottom:12px;z-index:10;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.2);background:#111;color:#fff;">
     Kamera wechseln
   </button>
-  <script>
-    const sceneEl = document.querySelector('a-scene');
-    sceneEl.addEventListener('arReady', () => console.log('[MindAR] arReady'));
-    sceneEl.addEventListener('arError', (e) => console.error('[MindAR] arError', e));
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { MindARThree } from 'mindar-image-three';
+
+    // MindAR initialisieren
+    const mindarThree = new MindARThree({
+      container: document.body,
+      imageTargetSrc: '../assets/targets/target.mind?v=3' // dein kompiliertes Target
+    });
+
+    const { renderer, scene, camera } = mindarThree;
+
+    // Renderer: sauberes Farbmanagement & transparenter Clear
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(devicePixelRatio);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.setClearColor(0x000000, 0);
+
+    // Grundlicht
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.2));
+    const dir = new THREE.DirectionalLight(0xffffff, 1.0); dir.position.set(0,6,0); scene.add(dir);
+
+    // Anker für Target 0
+    const anchor = mindarThree.addAnchor(0);
+
+    // Testobjekt (würfel)
+    const cube = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 0.5, 0.5),
+      new THREE.MeshNormalMaterial()
+    );
+    anchor.group.add(cube);
+
+    // Start
+    const start = async () => {
+      await mindarThree.start();
+      renderer.setAnimationLoop(() => {
+        renderer.render(scene, camera);
+      });
+    };
+    start();
+
+    // Kamera wechseln
     document.getElementById('switchCam').addEventListener('click', async () => {
-      try { await sceneEl.systems['mindar-image-system'].switchCamera(); }
-      catch (e) { console.error(e); }
+      try { await mindarThree.switchCamera(); } catch(e) { console.error(e); }
+    });
+
+    // Resize
+    window.addEventListener('resize', () => {
+      renderer.setSize(window.innerWidth, window.innerHeight);
     });
   </script>
 </body>
