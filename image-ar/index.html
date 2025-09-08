@@ -2,11 +2,22 @@
 <html lang="de">
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Image AR – MindAR + Three</title>
-  <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}</style>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Image AR – MindAR + Three (KNOWN-GOOD)</title>
+  <style>
+    html,body{margin:0;height:100%;overflow:hidden;background:#000;color:#fff;font-family:system-ui}
+    #ui{position:fixed;inset:auto 0 0 0;display:flex;gap:8px;justify-content:flex-end;padding:12px;z-index:10}
+    #log{position:fixed;left:12px;top:12px;z-index:10;background:rgba(0,0,0,.5);padding:8px 10px;border-radius:8px;max-width:80vw;font:12px/1.3 monospace;white-space:pre-wrap}
+    #hint{position:fixed;inset:0;display:grid;place-items:center;z-index:9;background:linear-gradient(180deg,rgba(0,0,0,.4),rgba(0,0,0,.2))}
+    #hint .card{max-width:min(92vw,520px);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15);border-radius:16px;padding:12px}
+    #hint img{width:100%;border-radius:12px;opacity:.9}
+    button{padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:#111;color:#fff}
+  </style>
 
-  <!-- Importmap: Three.js + MindAR (Three-Bundle) -->
+  <!-- Polyfill für Import Maps (für Browser, die's noch nicht nativ haben) -->
+  <script async src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.js"></script>
+
+  <!-- Importmap: Three + MindAR (Three-Bundle) -->
   <script type="importmap">
   {
     "imports": {
@@ -17,60 +28,71 @@
   </script>
 </head>
 <body>
-  <button id="switchCam" style="position:fixed;right:12px;bottom:12px;z-index:10;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.2);background:#111;color:#fff;">
-    Kamera wechseln
-  </button>
+  <div id="log">Bereit…</div>
+  <div id="ui">
+    <button id="start">Start AR</button>
+    <button id="switch" disabled>Kamera wechseln</button>
+  </div>
+  <!-- Such-Overlay für das Referenzbild (CDN) -->
+  <div id="hint">
+    <div class="card">
+      <img src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png" alt="Referenzbild">
+      <p style="margin:.5rem 0 0;opacity:.85">Suche dieses Bild und richte die Kamera darauf.</p>
+    </div>
+  </div>
 
   <script type="module">
     import * as THREE from 'three';
-    import { MindARThree } from 'mindar-image-three';
+    import {MindARThree} from 'mindar-image-three';
 
-    // MindAR initialisieren
+    const log = (...a)=>{ const el=document.getElementById('log'); el.textContent = a.map(x=>typeof x==='string'?x:JSON.stringify(x)).join(' '); console.log(...a); };
+
+    // MindAR initialisieren (KNOWN-GOOD CDN Target)
     const mindarThree = new MindARThree({
       container: document.body,
-      imageTargetSrc: '../assets/targets/target.mind?v=3' // dein kompiliertes Target
+      imageTargetSrc: 'https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind'
     });
+    const {renderer, scene, camera} = mindarThree;
 
-    const { renderer, scene, camera } = mindarThree;
-
-    // Renderer: sauberes Farbmanagement & transparenter Clear
+    // Renderer
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(devicePixelRatio);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.setClearColor(0x000000, 0);
 
-    // Grundlicht
+    // Licht
     scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.2));
     const dir = new THREE.DirectionalLight(0xffffff, 1.0); dir.position.set(0,6,0); scene.add(dir);
 
-    // Anker für Target 0
+    // Anchor + Demo-Objekt
     const anchor = mindarThree.addAnchor(0);
-
-    // Testobjekt (würfel)
-    const cube = new THREE.Mesh(
-      new THREE.BoxGeometry(0.5, 0.5, 0.5),
-      new THREE.MeshNormalMaterial()
-    );
+    const cube = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.5,0.5), new THREE.MeshNormalMaterial());
     anchor.group.add(cube);
+    anchor.onTargetFound = ()=>{ document.getElementById('hint').style.display='none'; log('targetFound'); };
+    anchor.onTargetLost  = ()=>{ document.getElementById('hint').style.display='grid'; log('targetLost'); };
 
-    // Start
-    const start = async () => {
-      await mindarThree.start();
-      renderer.setAnimationLoop(() => {
-        renderer.render(scene, camera);
-      });
-    };
-    start();
+    // Start via User-Gesture
+    document.getElementById('start').addEventListener('click', async ()=>{
+      try{
+        document.getElementById('start').disabled = true;
+        await mindarThree.start();
+        document.getElementById('switch').disabled = false;
+        renderer.setAnimationLoop(()=>{ renderer.render(scene, camera); });
+        log('AR gestartet');
+      }catch(e){
+        log('Fehler beim Start:', String(e));
+        alert('Start fehlgeschlagen: ' + e);
+        document.getElementById('start').disabled = false;
+      }
+    });
 
     // Kamera wechseln
-    document.getElementById('switchCam').addEventListener('click', async () => {
-      try { await mindarThree.switchCamera(); } catch(e) { console.error(e); }
+    document.getElementById('switch').addEventListener('click', async ()=>{
+      try{ await mindarThree.switchCamera(); log('Kamera gewechselt'); }catch(e){ log('switchCamera error:', String(e)); }
     });
 
     // Resize
-    window.addEventListener('resize', () => {
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
+    addEventListener('resize', ()=>{ renderer.setSize(innerWidth, innerHeight); });
   </script>
 </body>
 </html>
