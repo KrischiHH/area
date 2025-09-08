@@ -1,40 +1,60 @@
 <!doctype html>
 <html lang="de">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<title>Image AR – Start-Overlay (A-Frame + MindAR + DOM-Video)</title>
-<style>
-  html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:system-ui;color:#fff}
-  /* Ebenen: 0 Video, 1 Canvas, 2 UI/Hints, 3 Intro-Overlay */
-  #videoLayer{position:fixed;inset:0;z-index:0}
-  #videoLayer video{position:absolute;inset:0;width:100vw;height:100dvh;object-fit:cover}
-  a-scene{position:fixed;inset:0;z-index:1}
-  #hint{position:fixed;right:12px;top:12px;z-index:2;pointer-events:none}
-  #hint img{width:160px;height:auto;border-radius:12px;opacity:.9;display:block}
-  #log{position:fixed;left:12px;top:12px;z-index:2;background:rgba(0,0,0,.55);padding:8px 10px;border-radius:8px;font:12px/1.3 monospace}
-  /* Intro-Overlay */
-  #intro{position:fixed;inset:0;z-index:3;display:grid;place-items:center;
-         background:linear-gradient(180deg,rgba(0,0,0,.6),rgba(0,0,0,.35))}
-  .card{width:min(92vw,520px);padding:16px;border-radius:16px;
-        background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.15)}
-  .card img{width:100%;height:auto;border-radius:12px;display:block}
-  .card h2{margin:10px 0 6px;font-size:18px}
-  .card p{margin:0 0 12px;opacity:.85}
-  .card button{padding:10px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.25);
-               background:#111;color:#fff;width:100%}
-</style>
-<!-- A-Frame + MindAR -->
-<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-<!-- Animationen für GLB -->
-<script src="https://unpkg.com/aframe-extras@6.1.1/dist/aframe-extras.min.js"></script>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>Image AR – stabil (A-Frame + MindAR + DOM-Video)</title>
+  <style>
+    html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:system-ui;color:#fff}
+    /* VR-Button sicher ausblenden */
+    .a-enter-vr-button, .a-enter-vr { display:none !important; }
+
+    /* Ebenen: 0 Video, 1 Canvas, 2 UI/Hints, 3 Intro-Overlay */
+    #videoLayer{position:fixed;inset:0;z-index:0}
+    #videoLayer video{position:absolute;inset:0;width:100vw;height:100dvh;object-fit:cover}
+    a-scene{position:fixed;inset:0;z-index:1}
+
+    /* kleines Hinweisbild oben rechts – erst nach Start sichtbar */
+    #hint{ display:none; position:fixed; right:12px; top:12px; z-index:2; pointer-events:none }
+    #hint img{ width:160px; height:auto; border-radius:12px; opacity:.9; display:block }
+
+    /* kleines Log (zum Debuggen) */
+    #log{position:fixed;left:12px;top:12px;z-index:2;background:rgba(0,0,0,.55);
+         padding:8px 10px;border-radius:8px;font:12px/1.3 monospace}
+
+    /* Start-Overlay: wirklich zentriert + Safe-Area */
+    #intro{
+      position:fixed; inset:0; z-index:3; display:grid; place-items:center;
+      padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)) 16px;
+      background:linear-gradient(180deg,rgba(0,0,0,.6),rgba(0,0,0,.35));
+    }
+    #intro .card{
+      width:min(92vw,520px);
+      max-height:min(80dvh,680px);
+      display:flex; flex-direction:column; gap:10px;
+      border-radius:16px; padding:16px; box-sizing:border-box;
+      background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.15);
+    }
+    #intro .card img{ width:100%; max-height:48dvh; object-fit:cover; border-radius:12px }
+    #intro .card h2{ margin:6px 0 0; font-size:18px }
+    #intro .card p{ margin:0 0 10px; opacity:.85 }
+    #intro .card button{
+      padding:10px 14px; border-radius:12px; border:1px solid rgba(255,255,255,.25);
+      background:#111; color:#fff; width:100%;
+    }
+  </style>
+
+  <!-- A-Frame + MindAR (bewährte Versionen) -->
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <!-- Animationen für GLB -->
+  <script src="https://unpkg.com/aframe-extras@6.1.1/dist/aframe-extras.min.js"></script>
 </head>
 <body>
-  <!-- 0) echter Kamera-Stream -->
+  <!-- 0) echter Kamera-Stream (wird zur Laufzeit hier eingehängt) -->
   <div id="videoLayer"></div>
 
-  <!-- 1) AR-Szene (transparent, damit Video durchscheint) -->
+  <!-- 1) AR-Szene (transparent, damit das Video dahinter sichtbar ist) -->
   <a-scene
     mindar-image="imageTargetSrc: ../assets/targets/target.mind?v=12; uiScanning: true; uiLoading: true"
     embedded
@@ -46,7 +66,7 @@
 
     <!-- 3D-Content auf Target 0 -->
     <a-entity id="marker" mindar-image-target="targetIndex: 0">
-      <!-- Dein GLB (bei Bedarf src auf eigenes Modell ändern) -->
+      <!-- Demo-GLB: ersetze src durch dein eigenes Modell, z. B. ../assets/models/deinmodell.glb -->
       <a-gltf-model id="model"
         src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
         position="0 0 0.05" scale="0.6 0.6 0.6"
@@ -55,72 +75,74 @@
     </a-entity>
   </a-scene>
 
-  <!-- 2) Klein-Hinweis während des Trackings -->
-  <div id="hint"><img src="../assets/targets/target.png" alt="Referenzbild"></div>
+  <!-- 2) kleines Hinweisbild (wird nach Start bis targetFound gezeigt) -->
+  <div id="hint">
+    <img src="/area/assets/targets/target.png?v=1" alt="Referenzbild">
+  </div>
   <div id="log">Bereit…</div>
 
-  <!-- 3) Start-Overlay (blockiert bis Tap) -->
+  <!-- 3) Start-Overlay mit OK-Button -->
   <div id="intro" role="dialog" aria-modal="true">
     <div class="card">
-      <img src="../assets/targets/target.png" alt="Zu scannendes Bild">
+      <img src="/area/assets/targets/target.png?v=1" alt="Zu scannendes Bild">
       <h2>Finde & scanne dieses Bild</h2>
       <p>Tippe auf „OK“, um die Kamera zu starten. Richte sie auf das Bild – dann startet die AR-Szene.</p>
       <button id="startBtn">OK – Scanner starten</button>
     </div>
   </div>
 
-<script>
-  const log = t => { const el=document.getElementById('log'); el.textContent = t; console.log(t); };
+  <script>
+    const log    = t => { document.getElementById('log').textContent = t; console.log(t); };
+    const scene  = document.querySelector('a-scene');
+    const layer  = document.getElementById('videoLayer');
+    const hint   = document.getElementById('hint');
+    const intro  = document.getElementById('intro');
+    const marker = document.getElementById('marker');
+    const startBtn = document.getElementById('startBtn');
 
-  const sceneEl = document.querySelector('a-scene');
-  const layer   = document.getElementById('videoLayer');
-  const hint    = document.getElementById('hint');
-  const intro   = document.getElementById('intro');
-  const marker  = document.getElementById('marker');
-  const startBtn= document.getElementById('startBtn');
-
-  // Video des MindAR-Backends ins DOM schieben (hinter Canvas)
-  function attachVideoWhenReady(){
-    const v = document.getElementById('mindar-image-video') || document.querySelector('video');
-    if (!v) { requestAnimationFrame(attachVideoWhenReady); return; }
-    v.setAttribute('playsinline',''); v.muted = true; v.autoplay = true;
-    if (v.parentElement !== layer) { layer.innerHTML=''; layer.appendChild(v); }
-    Object.assign(v.style, {position:'absolute', inset:'0', width:'100vw', height:'100dvh', objectFit:'cover'});
-    log('Video gebunden');
-  }
-
-  // Wir stoppen MindAR zunächst (falls unterstützt), starten erst bei Tap
-  let mindarSys = null;
-  sceneEl.addEventListener('loaded', () => {
-    mindarSys = sceneEl.systems['mindar-image-system'];
-    try { mindarSys && mindarSys.stop && mindarSys.stop(); } catch(e){ /* ignore */ }
-  });
-
-  startBtn.addEventListener('click', async ()=>{
-    intro.style.display = 'none';
-    try {
-      if (mindarSys && mindarSys.start) {
-        await mindarSys.start();           // Scanner + Kamera starten (A-Frame/MindAR)
-      }
-      // Video nach Start einhängen (MindAR erstellt/initialisiert das <video> jetzt)
-      setTimeout(attachVideoWhenReady, 200);
-      log('AR gestartet');
-    } catch(e){
-      log('Start-Fehler: '+e);
-      alert('Start fehlgeschlagen: '+e);
-      intro.style.display = 'grid';
+    // Kamera-Video von MindAR ins DOM ziehen (hinter die Canvas)
+    function attachVideoWhenReady(){
+      const v = document.getElementById('mindar-image-video') || document.querySelector('video');
+      if (!v) { requestAnimationFrame(attachVideoWhenReady); return; }
+      v.setAttribute('playsinline',''); v.muted = true; v.autoplay = true;
+      if (v.parentElement !== layer) { layer.innerHTML=''; layer.appendChild(v); }
+      Object.assign(v.style, {position:'absolute', inset:'0', width:'100vw', height:'100dvh', objectFit:'cover'});
+      log('Video gebunden');
     }
-  });
 
-  // Falls das Stop/Start-API auf dem Gerät nicht greift: Video binden, sobald MindAR "ready" meldet.
-  sceneEl.addEventListener('arReady', () => {
-    if (intro.style.display !== 'none') return; // wir warten auf Button
-    attachVideoWhenReady();
-  });
+    let mindarSys = null;
+    scene.addEventListener('loaded', () => {
+      mindarSys = scene.systems['mindar-image-system'];
+      // Falls MindAR sofort startet, versuchen wir es direkt zu stoppen,
+      // damit der Start erst nach Tap erfolgt (nicht kritisch, daher try/catch).
+      try { mindarSys && mindarSys.stop && mindarSys.stop(); } catch(_) {}
+    });
 
-  // Overlay-Logik während des Trackings
-  marker.addEventListener('targetFound', ()=>{ hint.style.display='none'; log('targetFound'); });
-  marker.addEventListener('targetLost',  ()=>{ hint.style.display='block'; log('targetLost'); });
-</script>
+    // Start per Tap
+    startBtn.addEventListener('click', async ()=>{
+      intro.style.display = 'none';
+      try {
+        if (mindarSys && mindarSys.start) { await mindarSys.start(); }
+        // Video einhängen + kleinen Hinweis oben rechts anzeigen
+        setTimeout(attachVideoWhenReady, 200);
+        hint.style.display = 'block';
+        log('AR gestartet');
+      } catch(e){
+        log('Start-Fehler: '+e);
+        alert('Start fehlgeschlagen: '+e);
+        intro.style.display = 'grid';
+      }
+    });
+
+    // Fallback: Sobald MindAR „ready“ ist, Videolayer binden (falls Start schon aktiv war)
+    scene.addEventListener('arReady', () => {
+      if (intro.style.display !== 'none') return; // wir warten auf den Button
+      attachVideoWhenReady();
+    });
+
+    // Hinweisbild ein/aus je nach Tracking
+    marker.addEventListener('targetFound', ()=>{ hint.style.display='none'; log('targetFound'); });
+    marker.addEventListener('targetLost',  ()=>{ hint.style.display='block'; log('targetLost'); });
+  </script>
 </body>
 </html>
