@@ -2,52 +2,45 @@
 <html lang="de">
 <head>
   <meta charset="utf-8"/>
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1, viewport-fit=cover"
-  />
-  <title>Image Viewer – AR (view-only, responsive)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>Image Viewer – AR (stable)</title>
   <style>
     *,*::before,*::after{box-sizing:border-box}
     html,body{
       margin:0; height:100%;
       background:#000; color:#fff; font-family:system-ui;
       overflow:hidden; overscroll-behavior:none; touch-action:manipulation;
+      -webkit-user-select:none; user-select:none;
     }
-
-    /* A-Frame VR-UI sicher ausschalten (div wird direkt im <body> angehängt) */
-    body > .a-enter-vr, body > .a-enter-vr-button { display:none !important; }
+    /* A-Frame VR-UI sicher weg */
+    .a-enter-vr,.a-enter-vr-button{display:none!important}
 
     /* Ebenen: 0 Poster/Video, 1 Canvas, 2 Hint, 3 Intro */
     #videoLayer{
-      position:fixed; inset:0; z-index:0;
-      width:100vw; height:100svh; /* stabil gegen Adressleisten-Jumps */
-      /* Poster (bis Video läuft) */
-      background: center/cover no-repeat url("/area/assets/targets/target.png?v=1"),
-                  #000;
+      position:fixed; left:0; top:0; width:100vw; height:100svh; z-index:0;
+      background: center/cover no-repeat url("/area/assets/targets/target.png?v=1"), #000;
     }
     #videoLayer video{
-      position:absolute; inset:0;
-      width:100%; height:100%;
+      position:absolute; left:0; top:0; width:100%; height:100%;
       object-fit:cover; object-position:center;
+      display:none; /* <-- bis Start verborgen */
     }
+    a-scene{position:fixed; left:0; top:0; width:100vw; height:100svh; z-index:1}
 
-    a-scene{position:fixed; inset:0; z-index:1}
-
-    /* Hinweis oben rechts – Safe-Area + Maxbreite, nie abgeschnitten */
+    /* Hinweis oben rechts – nie abgeschnitten */
     #hint{
       position:fixed;
-      right: max(12px, env(safe-area-inset-right));
-      top:   max(12px, env(safe-area-inset-top));
+      right:max(12px, env(safe-area-inset-right));
+      top:max(12px, env(safe-area-inset-top));
       z-index:2; pointer-events:none; display:none;
     }
     #hint img{
-      width: min(28vw, 180px); height:auto;
-      border-radius:12px; opacity:.92; display:block;
-      box-shadow:0 6px 18px rgba(0,0,0,.35);
+      width:min(28vw, 180px); height:auto; border-radius:12px; opacity:.92;
+      box-shadow:0 6px 18px rgba(0,0,0,.35); display:block;
+      max-width:calc(100vw - 24px - env(safe-area-inset-right) - env(safe-area-inset-left));
     }
 
-    /* Start-Overlay – sauber zentriert + Safe-Area */
+    /* Start-Overlay */
     #intro{
       position:fixed; inset:0; z-index:3; display:grid; place-items:center;
       padding:
@@ -58,8 +51,8 @@
       background:linear-gradient(180deg,rgba(0,0,0,.6),rgba(0,0,0,.35));
     }
     #intro .card{
-      width:min(92vw, 520px);
-      max-height:min(80svh, 680px);
+      width:min(92vw,520px); max-width:100vw;
+      max-height:min(80svh,680px);
       display:flex; flex-direction:column; gap:10px;
       border-radius:16px; padding:16px; box-sizing:border-box;
       background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.15);
@@ -85,7 +78,7 @@
 
   <!-- 1) AR-Szene -->
   <a-scene
-    mindar-image="imageTargetSrc: ../assets/targets/targets_2.mind?v=15; uiScanning: true; uiLoading: true"
+    mindar-image="imageTargetSrc: ../assets/targets/targets_2.mind?v=16; uiScanning: true; uiLoading: true"
     embedded
     renderer="alpha:true; antialias:true"
     vr-mode-ui="enabled:false"
@@ -125,22 +118,22 @@
     const marker  = document.getElementById('marker');
     const startBtn= document.getElementById('startBtn');
 
-    // Kamera-Video hinter die Canvas hängen
-    function attachVideoWhenReady(){
+    // Video-Element nach Start in #videoLayer hängen und erst dann sichtbar machen
+    function attachVideo(){
       const v = document.getElementById('mindar-image-video') || document.querySelector('video');
-      if (!v) { requestAnimationFrame(attachVideoWhenReady); return; }
+      if (!v) { requestAnimationFrame(attachVideo); return; }
       v.setAttribute('playsinline',''); v.muted = true; v.autoplay = true;
       if (v.parentElement !== layer) layer.replaceChildren(v);
-      // Größe über CSS (100% von #videoLayer) – kein Inline-Resize, damit kein Springen
+      v.style.display = 'block'; // <-- erst jetzt sichtbar (vorher hidden)
     }
 
-    // Stabil gegen Adressleisten-Änderungen
+    // Stabil gegen Adressleisten-Jumps
     addEventListener('resize', ()=>{
       const v = layer.querySelector('video');
       if (v) { v.style.transform='translateZ(0)'; requestAnimationFrame(()=>v.style.transform=''); }
     });
 
-    // Start-Flow (view-only)
+    // Start-Flow
     let mindarSys = null;
     scene.addEventListener('loaded', () => {
       mindarSys = scene.systems['mindar-image-system'];
@@ -151,7 +144,7 @@
       intro.style.display='none';
       try{
         await mindarSys.start();
-        setTimeout(attachVideoWhenReady, 200);
+        setTimeout(attachVideo, 200); // Video anhängen + sichtbar schalten
         hint.style.display='block';
       }catch(e){
         alert('Start fehlgeschlagen: '+e);
@@ -159,10 +152,7 @@
       }
     });
 
-    scene.addEventListener('arReady', ()=>{
-      if (intro.style.display==='none') attachVideoWhenReady();
-    });
-
+    // Kein auto-attach vor Start mehr! (verhindert „schmalen Kamerastreifen“)
     marker.addEventListener('targetFound', ()=>{ hint.style.display='none'; });
     marker.addEventListener('targetLost',  ()=>{ hint.style.display='block'; });
   </script>
