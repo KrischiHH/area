@@ -3,105 +3,95 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<title>Image AR – MindAR + Three (fixed container)</title>
+<title>Image AR – A-Frame + MindAR (stabil, DOM-Video + GLB)</title>
 <style>
-  :root{color-scheme:dark}
-  html,body{margin:0;height:100%;background:#000;color:#fff;font-family:system-ui;overflow:hidden}
-  /* Vollbild-Container NUR für MindAR (Video + Canvas) */
-  #app{
-    position:fixed; inset:0;
-    width:100vw; height:100dvh;   /* dynamic viewport height = keine „Adressleisten“-Lücken */
-    overflow:hidden; z-index:0;
-  }
-  /* UI oben drauf */
-  #ui{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;justify-content:flex-end;padding:12px;z-index:20}
-  #log{position:fixed;left:12px;top:12px;z-index:20;background:rgba(0,0,0,.55);padding:8px 10px;border-radius:8px;font:12px/1.3 monospace}
-  #hint{position:fixed;right:12px;top:12px;z-index:10;pointer-events:none}
-  #hint img{width:160px;border-radius:10px;opacity:.9}
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:system-ui;color:#fff}
+  /* Ebenen: 0 Video, 1 Canvas, 2 UI/Overlay */
+  #videoLayer{position:fixed;inset:0;z-index:0;display:block}
+  #videoLayer video{position:absolute;inset:0;width:100vw;height:100dvh;object-fit:cover}
+  a-scene{position:fixed;inset:0;z-index:1}
+  #ui{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;justify-content:flex-end;padding:12px;z-index:2}
+  #log{position:fixed;left:12px;top:12px;z-index:2;background:rgba(0,0,0,.55);padding:8px 10px;border-radius:8px;font:12px/1.3 monospace}
+  #hint{position:fixed;right:12px;top:12px;z-index:2;pointer-events:none}
+  #hint img{width:160px;height:auto;border-radius:12px;opacity:.9;display:block}
   button{padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:#111;color:#fff}
 </style>
-
-<!-- Polyfill synchron, dann Import Map -->
-<script src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.js" crossorigin="anonymous"></script>
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-    "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
-  }
-}
-</script>
+<!-- A-Frame + MindAR -->
+<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+<!-- Animationen für GLB (animation-mixer) -->
+<script src="https://unpkg.com/aframe-extras@6.1.1/dist/aframe-extras.min.js"></script>
 </head>
 <body>
-  <!-- >>> MindAR rendert in diesen Container (Video + Canvas) <<< -->
-  <div id="app"></div>
+  <!-- 0) echter Kamera-Stream -->
+  <div id="videoLayer"></div>
 
+  <!-- 1) AR-Szene (transparent, damit Video durchscheint) -->
+  <a-scene
+    mindar-image="imageTargetSrc: ../assets/targets/target.mind?v=10; uiScanning: true; uiLoading: true"
+    embedded
+    renderer="alpha:true; antialias:true"
+    vr-mode-ui="enabled:false"
+    device-orientation-permission-ui="enabled:true">
+
+    <a-camera look-controls="enabled:false"></a-camera>
+
+    <!-- 3D-Content auf Target 0 -->
+    <a-entity id="marker" mindar-image-target="targetIndex: 0">
+      <!-- A) Testwürfel (kannst du entfernen) -->
+      <!-- <a-box position="0 0 0" depth="0.5" height="0.5" width="0.5" color="#4FC3F7"></a-box> -->
+
+      <!-- B) GLB-Modell (ersetze src durch dein eigenes GLB) -->
+      <a-gltf-model id="model"
+        src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
+        position="0 0 0.05" scale="0.6 0.6 0.6" rotation="0 0 0"
+        animation-mixer="clip:*; loop:repeat">
+      </a-gltf-model>
+    </a-entity>
+  </a-scene>
+
+  <!-- 2) UI + Overlay -->
   <div id="log">Bereit…</div>
   <div id="ui">
-    <button id="start">Start AR</button>
-    <button id="switch" disabled>Kamera wechseln</button>
+    <button id="switch">Kamera wechseln</button>
   </div>
   <div id="hint">
-    <img src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png" alt="Referenzbild">
+    <!-- Dein Referenzbild (du hast es unter /targets/target.png im Root) -->
+    <img src="../targets/target.png" alt="Referenzbild">
   </div>
 
-<script type="module">
-  import * as THREE from 'three';
-  import { MindARThree } from 'mindar-image-three';
+<script>
+  const log = t=>{ const el=document.getElementById('log'); el.textContent=t; console.log(t); };
+  const sceneEl = document.querySelector('a-scene');
+  const layer = document.getElementById('videoLayer');
+  const hint  = document.getElementById('hint');
+  const marker= document.getElementById('marker');
 
-  const log = (t)=>{ document.getElementById('log').textContent=t; console.log(t); };
+  // 1) Kamera-Video von MindAR in unseren Layer ziehen (damit es sicher sichtbar ist)
+  function attachVideoWhenReady() {
+    const v = document.getElementById('mindar-image-video') || document.querySelector('video');
+    if (!v) { requestAnimationFrame(attachVideoWhenReady); return; }
+    v.setAttribute('playsinline',''); v.muted = true; v.autoplay = true;
+    if (v.parentElement !== layer) { layer.innerHTML = ''; layer.appendChild(v); }
+    v.style.position='absolute'; v.style.inset='0';
+    v.style.width='100vw'; v.style.height='100dvh'; v.style.objectFit='cover';
+    log('Video gebunden');
+  }
+  sceneEl.addEventListener('arReady', attachVideoWhenReady);
+  window.addEventListener('DOMContentLoaded', ()=>setTimeout(attachVideoWhenReady, 800)); // Fallback
 
-  const container = document.getElementById('app');
-  const mindarThree = new MindARThree({
-    container,
-    // erst mit Known-Good target testen:
-    imageTargetSrc: 'https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind'
-    // danach auf DEIN Target wechseln:
-    // imageTargetSrc: '../assets/targets/target.mind?v=8'
+  // 2) Kamera wechseln
+  document.getElementById('switch').addEventListener('click', async ()=>{
+    try {
+      await sceneEl.systems['mindar-image-system'].switchCamera();
+      log('Kamera gewechselt');
+      setTimeout(attachVideoWhenReady, 300); // MindAR erstellt dabei oft ein neues <video>
+    } catch(e){ log('switchCamera error: '+e); }
   });
 
-  const { renderer, scene, camera } = mindarThree;
-  // Renderer exakt auf Containermaß setzen
-  const resize = ()=>{
-    const w = container.clientWidth;
-    const h = container.clientHeight;
-    renderer.setSize(w, h, false);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.setClearColor(0x000000, 0);
-  };
-  resize();
-
-  // Licht
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.2));
-  const dir = new THREE.DirectionalLight(0xffffff, 1.0); dir.position.set(0,6,0); scene.add(dir);
-
-  // Anchor + Demo
-  const anchor = mindarThree.addAnchor(0);
-  const cube = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.5,0.5), new THREE.MeshNormalMaterial());
-  anchor.group.add(cube);
-  anchor.onTargetFound = ()=>{ document.getElementById('hint').style.display='none'; log('targetFound'); };
-  anchor.onTargetLost  = ()=>{ document.getElementById('hint').style.display='block'; log('targetLost'); };
-
-  // Start + Kamerawechsel
-  const startBtn = document.getElementById('start');
-  const switchBtn = document.getElementById('switch');
-
-  startBtn.addEventListener('click', async ()=>{
-    try{
-      startBtn.disabled = true;
-      await mindarThree.start();
-      switchBtn.disabled = false;
-      renderer.setAnimationLoop(()=>renderer.render(scene, camera));
-      log('AR gestartet');
-    }catch(e){ log('Start-Fehler: '+e); alert('Start fehlgeschlagen: '+e); startBtn.disabled=false; }
-  });
-
-  switchBtn.addEventListener('click', async ()=>{
-    try{ await mindarThree.switchCamera(); log('gewechselt'); }catch(e){ log('switchCamera error: '+e); }
-  });
-
-  addEventListener('resize', resize);
+  // 3) Overlay ein/aus
+  marker.addEventListener('targetFound', ()=>{ hint.style.display='none'; log('targetFound'); });
+  marker.addEventListener('targetLost',  ()=>{ hint.style.display='block'; log('targetLost'); });
 </script>
 </body>
 </html>
