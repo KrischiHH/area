@@ -13,12 +13,13 @@
   button{padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:#111;color:#fff}
 </style>
 
-<!-- Polyfill SYNCHRON laden (ohne async!), dann Import-Map -->
+<!-- Polyfill SYNCHRON laden, dann Import-Map -->
 <script src="https://unpkg.com/es-module-shims@1.10.0/dist/es-module-shims.js" crossorigin="anonymous"></script>
 <script type="importmap">
 {
   "imports": {
     "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
     "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
   }
 }
@@ -31,6 +32,7 @@
   <button id="switch" disabled>Kamera wechseln</button>
 </div>
 <div id="hint">
+  <!-- Ersetze das Bild bei Bedarf durch ../targets/target.png -->
   <img src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.png" alt="Referenzbild">
 </div>
 
@@ -40,12 +42,16 @@
 
   const log = (t)=>{ document.getElementById('log').textContent=t; console.log(t); };
 
+  // ===== Target wählen =====
+  const IMAGE_TARGET = 
+    'https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind';
+    // Für DEIN Target umstellen auf:
+    // '../assets/targets/target.mind?v=7';
+
+  // MindAR initialisieren
   const mindarThree = new MindARThree({
     container: document.body,
-    // Erst mit KNOWN-GOOD Target testen:
-    imageTargetSrc: 'https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind'
-    // Wenn das läuft → auf dein Target umstellen:
-    // imageTargetSrc: '../assets/targets/target.mind?v=7'
+    imageTargetSrc: IMAGE_TARGET
   });
 
   const { renderer, scene, camera } = mindarThree;
@@ -58,14 +64,14 @@
   scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.2));
   const dir = new THREE.DirectionalLight(0xffffff, 1.0); dir.position.set(0,6,0); scene.add(dir);
 
-  // Anchor + Demo-Würfel
+  // Anchor + Demo-Objekt
   const anchor = mindarThree.addAnchor(0);
   const cube = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.5,0.5), new THREE.MeshNormalMaterial());
   anchor.group.add(cube);
   anchor.onTargetFound = ()=>{ document.getElementById('hint').style.display='none'; log('targetFound'); };
   anchor.onTargetLost  = ()=>{ document.getElementById('hint').style.display='block'; log('targetLost'); };
 
-  // Start + Kamerawechsel
+  // Start + Kamera wechseln
   const startBtn = document.getElementById('start');
   const switchBtn = document.getElementById('switch');
 
@@ -76,14 +82,22 @@
       switchBtn.disabled = false;
       renderer.setAnimationLoop(()=>renderer.render(scene, camera));
       log('AR gestartet');
-    }catch(e){ log('Start-Fehler: '+e); alert('Start fehlgeschlagen: '+e); startBtn.disabled=false; }
+    }catch(e){
+      log('Start-Fehler: ' + e);
+      alert('Start fehlgeschlagen: ' + e);
+      startBtn.disabled = false;
+    }
   });
 
   switchBtn.addEventListener('click', async ()=>{
-    try{ await mindarThree.switchCamera(); log('Kamera gewechselt'); }catch(e){ log('switchCamera error: '+e); }
+    try{ await mindarThree.switchCamera(); log('Kamera gewechselt'); }
+    catch(e){ log('switchCamera error: ' + e); }
   });
 
   addEventListener('resize', ()=>renderer.setSize(innerWidth, innerHeight));
+
+  // Falls irgendwo ein Fehler hochkommt, landet er im Log:
+  window.onerror = (m,s,l,c,e)=>{ log('JS-Fehler: ' + m); };
 </script>
 </body>
 </html>
