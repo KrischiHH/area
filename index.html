@@ -1,70 +1,31 @@
 <!doctype html>
 <html lang="de">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Image AR – MindAR + A-Frame</title>
-  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-  <style>
-    html,body{margin:0;height:100%;background:#000}
-    /* Overlay-Hinweis */
-    #hint{
-      position:fixed; inset:0; display:grid; place-items:center; z-index:10;
-      background:linear-gradient(180deg,rgba(0,0,0,.45),rgba(0,0,0,.25));
-      color:#fff; text-align:center; padding:24px; font-family:system-ui;
-    }
-    #hint .card{
-      max-width:min(92vw,520px);
-      background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.15);
-      border-radius:16px; padding:14px;
-    }
-    #hint img{width:100%;opacity:.8;border-radius:12px;display:block}
-    #hint h3{margin:10px 0 6px;font-weight:600}
-    #hint p{margin:0;opacity:.9}
-  </style>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>WebAR Starter</title>
+<style>
+  :root{color-scheme:light dark} body{margin:0;min-height:100dvh;display:grid;place-items:center;
+  font-family:system-ui;background:linear-gradient(180deg,#0f1220,#0a0b12);color:#e8eefc}
+  .card{width:min(920px,92vw);padding:24px;border-radius:20px;background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.1);box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  h1{margin:0 0 8px;font-size:clamp(24px,4vw,36px)} .grid{display:grid;gap:12px;
+  grid-template-columns:repeat(auto-fit,minmax(240px,1fr));margin-top:18px}
+  a.tile{display:block;padding:16px;border-radius:14px;background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.15);text-decoration:none;color:inherit}
+  a.tile:hover{transform:translateY(-2px);transition:transform .2s}
+</style>
 </head>
 <body>
-  <!-- A-Frame / MindAR Scene -->
-  <a-scene
-    mindar-image="imageTargetSrc: ../assets/targets/target.mind"
-    color-space="sRGB"
-    renderer="precision: mediump; alpha: true; antialias: true"
-    vr-mode-ui="enabled: false"
-    device-orientation-permission-ui="enabled: true">
-
-    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
-
-    <!-- Dein Marker-Content -->
-    <a-entity id="marker" mindar-image-target="targetIndex: 0">
-      <!-- Test-Box (funktioniert ohne GLB) -->
-      <a-box position="0 0 0" depth="0.5" height="0.5" width="0.5" color="#4FC3F7"></a-box>
-
-      <!-- Beispiel GLB:
-      <a-gltf-model src="../assets/models/sample.glb" position="0 0 0" scale="0.2 0.2 0.2"></a-gltf-model>
-      -->
-    </a-entity>
-  </a-scene>
-
-  <!-- Such-Overlay mit Vorschau des Referenzbilds -->
-  <div id="hint">
-    <div class="card">
-      <img src="../assets/targets/target.png" alt="Referenzbild">
-      <h3>Suche dieses Bild in deiner Umgebung</h3>
-      <p>Richte die Kamera darauf – dann startet die AR-Szene automatisch.</p>
+  <div class="card">
+    <h1>WebAR Starter</h1>
+    <p>Wähle einen Modus:</p>
+    <div class="grid">
+      <a class="tile" href="./image-ar/"><b>Image AR</b><br/><small>MindAR</small></a>
+      <a class="tile" href="./surface-ar/"><b>Surface AR (native)</b><br/><small>Scene Viewer / Quick Look</small></a>
+      <a class="tile" href="./surface-ar/webxr.html"><b>Surface AR (WebXR)</b><br/><small>Android Chrome</small></a>
+      <a class="tile" href="./editor/"><b>Mini-Editor</b><br/><small>GLB laden & exportieren</small></a>
+      <a class="tile" href="./qr/"><b>QR-Generator</b><br/><small>Link → QR</small></a>
     </div>
   </div>
-
-  <script>
-    // Overlay ein/aus je nach Tracking-Status
-    const marker = document.getElementById('marker');
-    const hint = document.getElementById('hint');
-
-    marker.addEventListener('targetFound', () => { hint.style.display = 'none'; });
-    marker.addEventListener('targetLost',  () => { hint.style.display = 'grid'; });
-
-    // Hinweis: Auf Mobilgeräten wählt MindAR i. d. R. automatisch die Rückkamera ("environment").
-    // Falls ein Gerät dennoch die Frontkamera nimmt, sag Bescheid – dann ergänze ich einen "Kamera wechseln"-Button.
-  </script>
 </body>
 </html>
