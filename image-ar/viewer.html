@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<title>Image Viewer – AR (Aero-Flow, eigenes Scanner-UI)</title>
+<title>Image Viewer – AR (Aero-Flow, robuster Fallback)</title>
 <style>
   *,*::before,*::after{box-sizing:border-box}
   html,body{
@@ -13,30 +13,28 @@
     -webkit-user-select:none;user-select:none;
   }
 
-  /* A-Frame UI ausblenden + Canvas transparent halten */
+  /* A-Frame UI ausblenden + Canvas transparent */
   .a-enter-vr,.a-enter-vr-button,.a-modal{display:none!important}
   a-scene, canvas.a-canvas { background: transparent !important; }
 
   /* Ebenen: 0 Video (Preview/MindAR), 1 Canvas, 2 ScanUI+Hint, 3 Overlay, 4 Error */
   #videoLayer{position:fixed;inset:0;z-index:0;width:100vw;height:100svh;background:#000}
-  #videoLayer video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center}
+  #videoLayer video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;display:block}
   #poster{position:absolute;inset:0;background:center/cover no-repeat url("/area/assets/targets/target.png?v=1")}
 
   a-scene{position:fixed;inset:0;z-index:1}
 
-  /* --- Eigenes Scanner-UI (sichtbar bis targetFound) --- */
+  /* --- Eigenes Scanner-UI --- */
   #scanUI{
     position:fixed;inset:0;z-index:2;pointer-events:none;display:none;
-    padding: max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right))
-             max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));
+    padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right))
+            max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));
   }
   #scanUI .frame{
     position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
     width:min(70vw, 480px);height:min(45vh, 360px);
-    border-radius:16px; /* unsichtbar, nur Eckenrender */
   }
-  /* vier Ecken */
-  #scanUI .corner{position:absolute;width:28px;height:28px;border:3px solid rgba(255,255,255,.85)}
+  #scanUI .corner{position:absolute;width:28px;height:28px;border:3px solid rgba(255,255,255,.9)}
   #scanUI .tl{left:-3px;top:-3px;border-right:none;border-bottom:none;border-top-left-radius:12px}
   #scanUI .tr{right:-3px;top:-3px;border-left:none;border-bottom:none;border-top-right-radius:12px}
   #scanUI .bl{left:-3px;bottom:-3px;border-right:none;border-top:none;border-bottom-left-radius:12px}
@@ -74,10 +72,9 @@
   .tips li{margin:2px 0}
   .btn{padding:12px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:#111;color:#fff;width:100%}
 
-  /* Error-Badge */
+  /* Error-Badge (nur für echte Fehler, nicht für "Video nicht gefunden") */
   #err{position:fixed;left:12px;top:12px;z-index:4;background:#b00020;padding:8px 10px;border-radius:8px;display:none;font:12px/1.35 monospace}
 
-  /* Fallback für Browser ohne svh */
   @supports not (height:100svh){
     html,body,#videoLayer,a-scene{height:calc(var(--vh,1vh)*100)}
   }
@@ -95,7 +92,7 @@
     <video id="preview" autoplay muted playsinline></video>
   </div>
 
-  <!-- 1) Eigene Scan-UI + Hint -->
+  <!-- 1) Eigenes Scanner-UI + Hint -->
   <div id="scanUI">
     <div class="frame">
       <div class="corner tl"></div><div class="corner tr"></div>
@@ -103,7 +100,6 @@
       <div class="msg">Suche dieses Bild…</div>
     </div>
   </div>
-
   <div id="hint"><img id="hintImg" alt="Referenzbild"></div>
 
   <!-- 2) Overlay-Kachel -->
@@ -168,8 +164,10 @@ let cfg = {
 })();
 
 /* ------------ Sofort: leichte Kamera-Preview ------------ */
+const videoLayer = document.getElementById('videoLayer');
 const previewVideo = document.getElementById('preview');
 const poster       = document.getElementById('poster');
+
 async function startPreview(){
   try{
     const constraints = {
@@ -198,33 +196,33 @@ function stopPreview(){
   previewVideo.style.display = 'none';
 }
 
-/* ------------ MindAR-Video abwarten & übernehmen ------------ */
-function waitForMindarVideo(timeout=8000){
-  return new Promise((resolve,reject)=>{
-    const t0 = performance.now();
+/* ------------ MindAR-Video optional übernehmen ------------ */
+function findMindarVideo(){
+  return document.getElementById('mindar-image-video')
+      || document.querySelector('video#mindar-image-video')
+      || [...document.querySelectorAll('video')].find(el => /mindar/i.test(el.id));
+}
+async function tryAttachMindarVideo(maxWaitMs=8000){
+  const t0 = performance.now();
+  return new Promise(resolve=>{
     (function poll(){
-      const v = document.getElementById('mindar-image-video')
-            || document.querySelector('video#mindar-image-video')
-            || [...document.querySelectorAll('video')].find(el => /mindar/i.test(el.id));
-      if (v) return resolve(v);
-      if (performance.now() - t0 > timeout) return reject(new Error('MindAR-Video nicht gefunden'));
+      const v = findMindarVideo();
+      if (v){
+        v.setAttribute('playsinline',''); v.muted = true; v.autoplay = true;
+        if (v.parentNode !== videoLayer) videoLayer.appendChild(v);
+        Object.assign(v.style,{position:'absolute',inset:'0',width:'100%',height:'100%',objectFit:'cover',objectPosition:'center',display:'block'});
+        stopPreview(); // jetzt Preview beenden
+        return resolve(true);
+      }
+      if (performance.now() - t0 > maxWaitMs) return resolve(false); // kein Fehler mehr!
       requestAnimationFrame(poll);
     })();
   });
 }
 
-async function attachMindarVideo(videoLayer){
-  const v = await waitForMindarVideo(8000);
-  v.setAttribute('playsinline',''); v.muted = true; v.autoplay = true;
-  if (v.parentNode !== videoLayer) videoLayer.appendChild(v);
-  Object.assign(v.style,{position:'absolute',inset:'0',width:'100%',height:'100%',objectFit:'cover',objectPosition:'center',display:'block'});
-  stopPreview(); // erst jetzt Preview stoppen
-}
-
 /* ------------ Flow: Overlay → MindAR lazy starten ------------ */
 const overlay   = document.getElementById('overlay');
 const startBtn  = document.getElementById('startBtn');
-const videoLayer= document.getElementById('videoLayer');
 const hint      = document.getElementById('hint');
 const scanUI    = document.getElementById('scanUI');
 
@@ -240,18 +238,20 @@ async function buildAndStartMindAR(){
   scene.setAttribute('device-orientation-permission-ui','enabled:true');
   scene.style.position='fixed'; scene.style.inset='0'; scene.style.zIndex='1';
 
-  /* Wichtig: Wir nutzen EIGENES Scan-UI → MindAR-UI aus */
+  /* Wir nutzen EIGENES Scan-UI → MindAR-UI aus */
   scene.setAttribute('mindar-image', `imageTargetSrc: ${cfg.target.mindUrl}; uiScanning: false; uiLoading: false`);
 
+  // Kamera
   const cam = document.createElement('a-camera');
   cam.setAttribute('look-controls','enabled:false');
   scene.appendChild(cam);
 
-  // Leichtes Licht
+  // leichtes Licht
   const hemi = document.createElement('a-entity');
   hemi.setAttribute('light', `type:hemisphere; intensity:${cfg.lighting?.hemi ?? 1.2}`);
   scene.appendChild(hemi);
 
+  // Marker + Modell
   const marker = document.createElement('a-entity');
   marker.setAttribute('mindar-image-target','targetIndex: 0');
 
@@ -267,7 +267,7 @@ async function buildAndStartMindAR(){
   scene.appendChild(marker);
   document.body.appendChild(scene);
 
-  // Audio optional
+  // Audio (optional)
   let audioEl = null;
   if (cfg.audio?.url){
     audioEl = document.createElement('audio');
@@ -276,19 +276,29 @@ async function buildAndStartMindAR(){
     document.body.appendChild(audioEl);
   }
 
-  // Scanner-UI / Hint steuern
+  // Scanner/Hint steuern
   const showScanning = ()=>{ scanUI.style.display='block'; hint.style.display='block'; };
   const hideScanning = ()=>{ scanUI.style.display='none';  hint.style.display='none';  };
-
   marker.addEventListener('targetFound', hideScanning);
   marker.addEventListener('targetLost',  showScanning);
 
+  // Starten
   await new Promise(res => scene.addEventListener('loaded', res, {once:true}));
   const sys = scene.systems['mindar-image-system'];
+  try {
+    await sys.start();
+  } catch (e) {
+    showErr('MindAR konnte nicht gestartet werden: ' + e.message);
+    return; // echter Fehler -> abbrechen
+  }
 
-  await sys.start();                     // MindAR starten
-  await attachMindarVideo(videoLayer);   // MindAR-Video übernehmen -> dann Preview stoppen
-  showScanning();                        // Scanner-UI & Hint sofort zeigen
+  // MindAR-Video optional übernehmen; wenn nicht vorhanden, kein Abbruch
+  const attached = await tryAttachMindarVideo(8000);
+  if (!attached){
+    console.warn('MindAR-Video nicht gefunden – Preview bleibt aktiv (Fallback).');
+  }
+
+  showScanning(); // Eigenes Scan-UI + Hint anzeigen
 
   // Akku sparen
   document.addEventListener('visibilitychange', () => {
@@ -298,8 +308,7 @@ async function buildAndStartMindAR(){
 
 startBtn.addEventListener('click', async ()=>{
   overlay.classList.add('hidden');
-  try { await buildAndStartMindAR(); }
-  catch(e){ showErr('Start fehlgeschlagen: '+e.message); overlay.classList.remove('hidden'); }
+  await buildAndStartMindAR(); // kein harter Fehler mehr, wenn Video nicht gefunden
 });
 </script>
 </body>
