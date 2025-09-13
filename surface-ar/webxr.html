@@ -8,7 +8,6 @@
     *,*::before,*::after{box-sizing:border-box}
     html,body{margin:0;height:100%;overflow:hidden;background:#000;color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
     canvas{display:block;background:transparent!important}
-    /* UI overlay */
     #ui{position:fixed;inset:0;pointer-events:none;z-index:10}
     #top{position:absolute;right:max(12px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));display:flex;gap:8px}
     .btn{pointer-events:auto;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:#111;color:#fff}
@@ -44,7 +43,7 @@
       if (sceneUrl){
         try{
           const r = await fetch(sceneUrl, {cache:'no-cache'}); if(!r.ok) throw new Error(r.status+' '+r.statusText);
-          const j = await r.json();
+        const j = await r.json();
           CFG.model = Object.assign(CFG.model, j.model||{});
           CFG.lighting = Object.assign(CFG.lighting, j.lighting||{});
           if (j.lighting?.dir) CFG.lighting.dir = Object.assign(CFG.lighting.dir, j.lighting.dir);
@@ -64,13 +63,12 @@
       scene = new THREE.Scene();
       camera = new THREE.PerspectiveCamera();
 
-      // Licht
       scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, CFG.lighting.hemi ?? 1.0));
       const dir = new THREE.DirectionalLight(0xffffff, CFG.lighting.dir?.intensity ?? 0.9);
       const [dx,dy,dz] = CFG.lighting.dir?.pos ?? [0,6,0];
       dir.position.set(dx,dy,dz); scene.add(dir);
 
-      renderer = new THREE.WebGLRenderer({alpha:true, antialias:false, powerPreference:'low-power', preserveDrawingBuffer:false});
+      renderer = new THREE.WebGLRenderer({alpha:true, antialias:false, powerPreference:'low-power'});
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.0;
@@ -79,30 +77,23 @@
       renderer.xr.enabled = true;
       document.body.appendChild(renderer.domElement);
 
-      // Reticle
       const ring = new THREE.RingGeometry(0.07, 0.08, 48).rotateX(-Math.PI/2);
       const mat  = new THREE.MeshBasicMaterial({color:0x00ffff});
       reticle = new THREE.Mesh(ring, mat);
       reticle.matrixAutoUpdate = false; reticle.visible = false;
       scene.add(reticle);
 
-      // Controller
       controller = renderer.xr.getController(0);
       controller.addEventListener('select', onSelect);
       scene.add(controller);
 
-      // UI
       document.getElementById('reset').addEventListener('click', ()=>{
         placed = false;
         if (model) model.visible = false;
         document.getElementById('hint').textContent = 'Bewege das Gerät, bis der Ring stabil ist. Tippe, um zu platzieren.';
       });
 
-      window.addEventListener('resize', onResize);
-    }
-
-    function onResize(){
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      window.addEventListener('resize', ()=>renderer.setSize(window.innerWidth, window.innerHeight));
     }
 
     function onSelect(){
@@ -178,41 +169,42 @@
       renderer.render(scene, camera);
     }
 
-    // AR starten – ROBUST mit Fallbacks
+    // Session mit mehreren Varianten (gegen „schwarzer Screen“)
     async function startAR(){
       const enterBtn = document.getElementById('enter');
-      if (!navigator.xr){ showErr('WebXR nicht verfügbar. Nutze ggf. die native Surface-AR Seite.'); return; }
+      if (!navigator.xr){ showErr('WebXR nicht verfügbar.'); return; }
       const supported = await navigator.xr.isSessionSupported('immersive-ar');
-      if (!supported){ showErr('Dein Gerät/Browser unterstützt kein WebXR-AR. Nutze ggf. die native Surface-AR Seite.'); return; }
+      if (!supported){ showErr('Dein Gerät/Browser unterstützt kein WebXR-AR.'); return; }
 
-      // Erstmal minimal: nur hit-test als required
-      let session = null;
-      try{
-        session = await navigator.xr.requestSession('immersive-ar', {
-          requiredFeatures: ['hit-test'],
-          optionalFeatures: ['local-floor'] // dom-overlay weglassen – manche Geräte zeigen sonst schwarz
-        });
-      }catch(e){
-        // Fallback ohne local-floor
+      const variants = [
+        { requiredFeatures:['hit-test'], optionalFeatures:['local-floor','dom-overlay'], domOverlay:true },
+        { requiredFeatures:['hit-test'], optionalFeatures:['local-floor'], domOverlay:false },
+        { requiredFeatures:['hit-test'], optionalFeatures:[], domOverlay:false }
+      ];
+
+      let session = null, lastErr=null;
+      for (const v of variants){
         try{
-          session = await navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['hit-test'] });
-        }catch(e2){
-          showErr('AR-Session konnte nicht gestartet werden: '+e2.message);
-          return;
-        }
+          const init = { requiredFeatures: v.requiredFeatures, optionalFeatures: v.optionalFeatures };
+          if (v.domOverlay){
+            init.domOverlay = { root: document.getElementById('ui') };
+          }
+          session = await navigator.xr.requestSession('immersive-ar', init);
+          break;
+        }catch(e){ lastErr = e; }
       }
+      if (!session){ showErr('AR-Session konnte nicht gestartet werden: '+(lastErr?.message||'unbekannt')); return; }
 
-      // Referenzraum „local“ ist am kompatibelsten
-      renderer.xr.setReferenceSpaceType('local');
+      // Reference Space: erst local-floor, sonst local
+      try { renderer.xr.setReferenceSpaceType('local-floor'); }
+      catch { renderer.xr.setReferenceSpaceType('local'); }
       await renderer.xr.setSession(session);
 
-      // UI updaten
       enterBtn.style.display = 'none';
       document.getElementById('hint').textContent = 'Bewege das Gerät, bis der Ring stabil ist. Tippe, um zu platzieren.';
       animate();
     }
 
-    // Boot
     window.addEventListener('DOMContentLoaded', ()=>{
       init();
       document.getElementById('enter').addEventListener('click', startAR);
