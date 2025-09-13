@@ -23,7 +23,12 @@
       src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
       ar ar-modes="scene-viewer quick-look webxr"
       camera-controls autoplay exposure="1" shadow-intensity="1"
-      environment-image="https://modelviewer.dev/shared-assets/environments/neutral.hdr">
+      environment-image="https://modelviewer.dev/shared-assets/environments/neutral.hdr"
+      interpolation-decay="200"
+      camera-orbit="0deg 65deg 2.5m"     <!-- angenehmere Perspektive -->
+      field-of-view="35deg"
+      camera-target="0m 1m 0m"           <!-- zentriert auf ~1m Höhe -->
+      poster="">
       <button slot="ar-button">In AR öffnen</button>
     </model-viewer>
   </div>
@@ -37,28 +42,25 @@
   const sceneUrl = qs.get('scene');
   const showErr = (m)=>{ const el=document.getElementById('err'); el.textContent=m; el.style.display='block'; };
 
-  let cfg = { model:{ url:"https://modelviewer.dev/shared-assets/models/Astronaut.glb", usdzUrl:null } };
+  let cfg = { 
+    model:{ url:"https://modelviewer.dev/shared-assets/models/Astronaut.glb", usdzUrl:null },
+    target:{ previewUrl:null }
+  };
 
   (async ()=>{
     if (sceneUrl){
       try{
         const r = await fetch(sceneUrl, {cache:'no-cache'}); if(!r.ok) throw new Error(r.status+' '+r.statusText);
         const j = await r.json();
-        if (j.model) cfg.model = Object.assign(cfg.model, j.model);
+        if (j.model)  cfg.model  = Object.assign(cfg.model,  j.model);
+        if (j.target) cfg.target = Object.assign(cfg.target, j.target);
       }catch(e){ showErr('scene.json konnte nicht geladen werden: '+e.message); }
     }
     const mv = document.getElementById('mv');
     mv.src = cfg.model.url || mv.src;
-    // Optional: iOS Quick Look USDZ
-    if (cfg.model.usdzUrl){
-      mv.setAttribute('ios-src', cfg.model.usdzUrl);
-    } else {
-      mv.removeAttribute('ios-src');
-    }
-    // Optional: Poster aus Target-Preview?
-    // Wenn du willst, aktiviere das hier:
-    // const prev = (j?.target?.previewUrl) ?? null;
-    // if (prev) mv.setAttribute('poster', prev);
+    if (cfg.model.usdzUrl){ mv.setAttribute('ios-src', cfg.model.usdzUrl); } else { mv.removeAttribute('ios-src'); }
+    // Optional: Poster aus Target-Preview (schöne Lade-Ansicht)
+    if (cfg.target?.previewUrl){ mv.setAttribute('poster', cfg.target.previewUrl); }
   })();
 </script>
 </body>
