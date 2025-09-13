@@ -3,63 +3,85 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-  <title>Surface AR – Native (Scene Viewer / Quick Look)</title>
+  <title>Surface AR – Native (Full-Bleed)</title>
+
+  <!-- model-viewer -->
   <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+
   <style>
-    *,*::before,*::after{box-sizing:border-box}
-    html,body{margin:0;height:100%;background:#111;color:#e8eefc;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-    .wrap{display:grid;place-items:center;min-height:100vh;padding:16px}
-    model-viewer{width:min(100%,820px);height:80vh;border-radius:16px;overflow:hidden;background:#000}
-    button[slot="ar-button"]{padding:.8rem 1.2rem;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:#222;color:#fff}
-    #err{position:fixed;left:12px;top:12px;background:#b00020;padding:8px 10px;border-radius:8px;display:none;font:12px/1.35 monospace}
-    .tip{position:fixed;left:12px;bottom:12px;opacity:.85;font:14px/1.4 system-ui}
+    :root{ color-scheme: dark light }
+    *,*::before,*::after{ box-sizing: border-box }
+    html,body{ margin:0; height:100%; background:#000; font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial }
+    /* Full-bleed: füllt den kompletten Viewport, keine Kartenoptik */
+    model-viewer{
+      position: fixed; inset: 0;
+      width: 100vw; height: 100svh;  /* svh = stabil bei Mobile-URL-/Notch */
+      display: block; background:#000; border:0; border-radius:0; overflow:hidden;
+      --poster-color: transparent; /* keine weiße Fläche vorm Laden */
+    }
+    /* AR-Button dezent oben links */
+    button[slot="ar-button"]{
+      position: absolute; left: max(12px, env(safe-area-inset-left)); top: max(12px, env(safe-area-inset-top));
+      padding:.75rem 1rem; border-radius:12px; border:1px solid rgba(255,255,255,.25); background:#111; color:#fff
+    }
+    #err{
+      position: fixed; left: 12px; top: 12px; z-index: 9;
+      background:#b00020; color:#fff; padding:8px 10px; border-radius:8px; display:none; font:12px/1.35 monospace;
+      max-width:min(92vw,680px); white-space:pre-wrap
+    }
   </style>
 </head>
 <body>
   <div id="err"></div>
 
-  <div class="wrap">
-    <model-viewer id="mv"
-      src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
-      ar ar-modes="scene-viewer quick-look webxr"
-      camera-controls autoplay exposure="1" shadow-intensity="1"
-      environment-image="https://modelviewer.dev/shared-assets/environments/neutral.hdr"
-      interpolation-decay="200"
-      camera-orbit="0deg 70deg 3.2m"
-      field-of-view="30deg"
-      camera-target="0m 1m 0m"
-      poster="">
-      <button slot="ar-button">In AR öffnen</button>
-    </model-viewer>
-  </div>
-
-  <div class="tip">
-    <b>Tipp:</b> Auf Android öffnet sich „Scene Viewer“, auf iOS „Quick Look“.
-  </div>
+  <model-viewer id="mv"
+    src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
+    ar ar-modes="scene-viewer quick-look webxr"
+    camera-controls
+    exposure="1" shadow-intensity="1"
+    environment-image="https://modelviewer.dev/shared-assets/environments/neutral.hdr"
+    interaction-prompt="none"  <!-- keine Hand-Icon-Einblendung -->
+    camera-orbit="0deg 70deg 3m"  <!-- Startwert; wird nach load nochmal „fit“ gesetzt -->
+    field-of-view="30deg"
+    camera-target="0m 1m 0m"
+    poster="">
+    <button slot="ar-button">In AR öffnen</button>
+  </model-viewer>
 
 <script>
   const qs = new URLSearchParams(location.search);
   const sceneUrl = qs.get('scene');
-  const showErr = (m)=>{ const el=document.getElementById('err'); el.textContent=m; el.style.display='block'; };
+  const showErr = m => { const el = document.getElementById('err'); el.textContent = m; el.style.display='block'; };
 
+  // Defaults – werden durch scene.json überschrieben
   let cfg = {
-    model:{ url:"https://modelviewer.dev/shared-assets/models/Astronaut.glb", usdzUrl:null },
-    target:{ previewUrl:null }
+    model:  { url:"https://modelviewer.dev/shared-assets/models/Astronaut.glb", usdzUrl:null },
+    target: { previewUrl:null }
   };
 
-  (async ()=>{
+  (async () => {
     if (sceneUrl){
       try{
-        const r = await fetch(sceneUrl, {cache:'no-cache'}); if(!r.ok) throw new Error(r.status+' '+r.statusText);
+        const r = await fetch(sceneUrl, {cache:'no-cache'});
+        if (!r.ok) throw new Error(r.status+' '+r.statusText);
         const j = await r.json();
         if (j.model)  cfg.model  = Object.assign(cfg.model,  j.model);
         if (j.target) cfg.target = Object.assign(cfg.target, j.target);
       }catch(e){ showErr('scene.json konnte nicht geladen werden: '+e.message); }
     }
+
     const mv = document.getElementById('mv');
     mv.src = cfg.model.url || mv.src;
-    if (cfg.model.usdzUrl){ mv.setAttribute('ios-src', cfg.model.usdzUrl); } else { mv.removeAttribute('ios-src'); }
-    if (cfg.target?.previewUrl){ mv.setAttribute('poster', cfg.target.previewUrl); }
+    if (cfg.model.usdzUrl) mv.setAttribute('ios-src', cfg.model.usdzUrl); else mv.removeAttribute('ios-src');
+    if (cfg.target?.previewUrl) mv.setAttribute('poster', cfg.target.previewUrl);
+
+    // Nach dem Laden: Kamera so setzen, dass das Modell sicher komplett sichtbar ist
+    mv.addEventListener('load', () => {
+      // „auto“ bei der Distanz nutzt die passende Entfernung zur Komplettansicht
+      mv.cameraOrbit = '0deg 70deg auto';
+      mv.fieldOfView = '30deg';
+      mv.jumpCameraToGoal(); // sofort anwenden
+    });
   })();
 </script>
 </body>
