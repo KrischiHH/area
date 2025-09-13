@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+<title>WebAR Viewer (Surface & Image) – Hash Payload</title>
+<style>
+  :root{color-scheme:dark}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#000;color:#fff;font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+  canvas{display:block}
+  #ui{position:fixed;inset:0;pointer-events:none;z-index:10}
+  #top{position:absolute;right:max(12px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));display:flex;gap:8px}
+  .btn{pointer-events:auto;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:#111;color:#fff}
+  #hint{position:absolute;left:50%;bottom:max(20px,env(safe-area-inset-bottom));transform:translateX(-50%);pointer-events:auto;
+        background:rgba(0,0,0,.55);padding:10px 12px;border-radius:12px;font-size:13px}
+  #enter{pointer-events:auto;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+         padding:12px 18px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:#111;color:#fff}
+  #err{position:fixed;left:12px;top:12px;z-index:99;background:#b00020;padding:8px 10px;border-radius:8px;display:none;font:12px/1.35 monospace;max-width:min(92vw,680px);white-space:pre-wrap}
+  #thumb{position:absolute;right:max(12px,env(safe-area-inset-right));bottom:max(76px,env(safe-area-inset-bottom));width:96px;height:96px;
+         background:#000;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,.2);display:none}
+  #thumb img{width:100%;height:100%;object-fit:contain;background:#000}
+</style>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="err"></div>
+<div id="ui" aria-hidden="false">
+  <div id="top">
+    <button id="reset" class="btn" style="display:none">Neu platzieren</button>
+  </div>
+  <div id="hint">Tippe „Start AR“</div>
+  <button id="enter">Start AR</button>
+  <div id="thumb"><img id="thumbImg" alt=""></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+
+const $ = s => document.querySelector(s);
+const showErr = (m)=>{ const el=$("#err"); el.textContent=m; el.style.display='block'; console.error(m); };
+
+// -------- Hash-Payload laden --------
+function parseHash(){
+  try{
+    const h = location.hash?.slice(1)||'';
+    if(!h) throw new Error('Kein Payload im Hash (#...). Bitte Link aus dem Editor verwenden.');
+    const json = decodeURIComponent(escape(atob(h)));
+    const p = JSON.parse(json);
+    // erwartet: {mode:'surface'|'image', src, scale, rotationDeg[3], position[3], animIndex, audio?, image?, imageWidthMeters?}
+    if(!p.mode || !p.src) throw new Error('Payload unvollständig (mode/src fehlen).');
+    return p;
+  }catch(e){ showErr('Payload-Fehler: '+e.message); throw e; }
+}
+const PAYLOAD = parseHash();
+
+// -------- THREE/WebXR Basis --------
+let camera, scene, renderer, reticle, controller;
+let hitTestSource = null, hitTestSourceRequested = false;
+let model = null, mixer = null;
+const clock = new THREE.Clock();
+
+function initThree(){
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera();
+
+  // Licht
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.1));
+  const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+  dir.position.set(0,6,0); scene.add(dir);
+
+  renderer = new THREE.WebGLRenderer({alpha:true, antialias:false, powerPreference:'low-power'});
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.0;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 1.6));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.xr.enabled = true;
+  document.body.appendChild(renderer.domElement);
+
+  window.addEventListener('resize', ()=>renderer.setSize(window.innerWidth, window.innerHeight));
+}
+
+function makeReticle(){
+  const ring = new THREE.RingGeometry(0.07, 0.085, 48).rotateX(-Math.PI/2);
+  const mat  = new THREE.MeshBasicMaterial({color:0x00ffff});
+  reticle = new THREE.Mesh(ring, mat);
+  reticle.matrixAutoUpdate = false;
+  reticle.visible = false;
+  scene.add(reticle);
+}
+
+function loadModel(atMatrix=null){
+  return new Promise((resolve,reject)=>{
+    const loader = new GLTFLoader();
+    loader.load(PAYLOAD.src, (gltf)=>{
+      model = gltf.scene;
+      // Transform aus Payload
+      const s = Number(PAYLOAD.scale||1);
+      model.scale.set(s,s,s);
+      const [rx,ry,rz] = PAYLOAD.rotationDeg||[0,0,0];
+      model.rotation.set(THREE.MathUtils.degToRad(rx), THREE.MathUtils.degToRad(ry), THREE.MathUtils.degToRad(rz));
+
+      if (atMatrix){
+        model.position.setFromMatrixPosition(atMatrix);
+      } else if (PAYLOAD.position){
+        const [px,py,pz] = PAYLOAD.position;
+        model.position.set(px||0, py||0, pz||0);
+      }
+
+      scene.add(model);
+
+      const anims = gltf.animations||[];
+      if (anims.length){
+        mixer = new THREE.AnimationMixer(model);
+        const idx = Math.max(0, Math.min(anims.length-1, parseInt(PAYLOAD.animIndex||0,10)));
+        const clip = anims[idx];
+        if (clip) mixer.clipAction(clip).play();
+      }
+      resolve();
+    }, undefined, (err)=> reject(err));
+  });
+}
+
+// -------- Surface AR (Hit-Test) --------
+async function startSurfaceAR(){
+  if (!navigator.xr) throw new Error('WebXR nicht verfügbar.');
+  const supported = await navigator.xr.isSessionSupported('immersive-ar');
+  if (!supported) throw new Error('Dein Gerät/Browser unterstützt kein WebXR-AR.');
+
+  const variants = [
+    { requiredFeatures:['hit-test'], optionalFeatures:['dom-overlay','local-floor'], overlay:true },
+    { requiredFeatures:['hit-test'], optionalFeatures:['local-floor'], overlay:false },
+    { requiredFeatures:['hit-test'], optionalFeatures:[], overlay:false }
+  ];
+  let session=null,lastErr=null;
+  for (const v of variants){
+    try{
+      const init = { requiredFeatures:v.requiredFeatures, optionalFeatures:v.optionalFeatures };
+      if (v.overlay) init.domOverlay = { root: $("#ui") };
+      session = await navigator.xr.requestSession('immersive-ar', init);
+      break;
+    }catch(e){ lastErr=e; }
+  }
+  if (!session) throw new Error('AR-Session konnte nicht gestartet werden: '+(lastErr?.message||'unbekannt'));
+
+  try{ renderer.xr.setReferenceSpaceType('local-floor'); }catch{}
+  await renderer.xr.setSession(session);
+
+  // Controller + Reticle
+  controller = renderer.xr.getController(0);
+  controller.addEventListener('select', async ()=>{
+    if (!reticle?.visible) return;
+    if (!model){
+      await loadModel(reticle.matrix);
+    }else{
+      model.position.setFromMatrixPosition(reticle.matrix);
+      model.visible = true;
+    }
+    $("#hint").textContent = 'Platziert. „Neu platzieren“ tippen zum Verschieben.';
+    $("#reset").style.display = 'inline-block';
+  });
+  scene.add(controller);
+
+  session.addEventListener('end', ()=>{
+    hitTestSourceRequested=false; hitTestSource=null;
+    if (model) model.visible=false;
+    if (reticle) reticle.visible=false;
+    $("#reset").style.display='none';
+    $("#hint").textContent='Session beendet.';
+  });
+
+  makeReticle();
+
+  $("#reset").onclick = ()=>{
+    if (model) model.visible=false;
+    $("#hint").textContent = 'Bewege das Gerät, bis der Ring stabil ist. Tippe, um zu platzieren.';
+  };
+
+  $("#enter").style.display='none';
+  $("#hint").textContent = 'Bewege das Gerät, bis der Ring stabil ist. Tippe, um zu platzieren.';
+
+  renderer.setAnimationLoop((t, frame)=>{
+    const dt = clock.getDelta();
+    if (mixer) mixer.update(dt);
+
+    if (frame){
+      const referenceSpace = renderer.xr.getReferenceSpace();
+      const session = renderer.xr.getSession();
+
+      if (!hitTestSourceRequested){
+        session.requestReferenceSpace('viewer').then(viewerSpace=>{
+          session.requestHitTestSource({space:viewerSpace}).then(src=>{ hitTestSource = src; });
+        }).catch(e=>showErr('Hit-Test nicht verfügbar: '+e.message));
+        hitTestSourceRequested = true;
+      }
+
+      if (hitTestSource){
+        const results = frame.getHitTestResults(hitTestSource);
+        if (results.length){
+          const hit = results[0];
+          const pose = hit.getPose(referenceSpace);
+          if (pose){
+            reticle.visible = !model || !model.visible;
+            reticle.matrix.fromArray(pose.transform.matrix);
+          }
+        } else {
+          reticle.visible = false;
+        }
+      }
+    }
+    renderer.render(scene, camera);
+  });
+}
+
+// -------- Image AR (WebXR Image Tracking) --------
+async function startImageAR(){
+  if (!navigator.xr) throw new Error('WebXR nicht verfügbar.');
+  const supported = await navigator.xr.isSessionSupported('immersive-ar');
+  if (!supported) throw new Error('Dein Gerät/Browser unterstützt kein WebXR-AR.');
+
+  // Bild aus Data-URL → ImageBitmap
+  if (!PAYLOAD.image) throw new Error('Kein Trigger-Bild im Payload vorhanden.');
+  const imgBlob = await (await fetch(PAYLOAD.image)).blob();
+  const imgBitmap = await createImageBitmap(imgBlob);
+  const widthMeters = Number(PAYLOAD.imageWidthMeters||0.2);
+
+  let session;
+  try{
+    session = await navigator.xr.requestSession('immersive-ar', {
+      requiredFeatures: ['image-tracking'],
+      optionalFeatures: ['dom-overlay','local-floor'],
+      trackedImages: [{ image: imgBitmap, widthInMeters: widthMeters }],
+      domOverlay: { root: $("#ui") }
+    });
+  }catch(e){
+    throw new Error('Image Tracking nicht verfügbar: '+e.message+'\n(Tipp: Android Chrome unterstützt dies – iOS derzeit nicht.)');
+  }
+
+  try{ renderer.xr.setReferenceSpaceType('local-floor'); }catch{}
+  await renderer.xr.setSession(session);
+
+  $("#enter").style.display='none';
+  $("#hint").textContent = 'Suche das Bild. Bei Erkennung erscheint das Modell.';
+  // Thumbnail anzeigen
+  $("#thumbImg").src = PAYLOAD.image; $("#thumb").style.display='block';
+
+  const referenceSpace = await session.requestReferenceSpace('local');
+
+  // Modell vorbereiten (unsichtbar bis getrackt)
+  await loadModel();
+  model.visible = false;
+
+  session.addEventListener('end', ()=>{
+    $("#hint").textContent='Session beendet.';
+    $("#thumb").style.display='none';
+  });
+
+  renderer.setAnimationLoop((t, frame)=>{
+    const dt = clock.getDelta();
+    if (mixer) mixer.update(dt);
+
+    if (frame){
+      const results = frame.getImageTrackingResults?.() || [];
+      for (const res of results){
+        const state = res.trackingState; // 'tracked' | 'emulated' | 'untracked'
+        const pose = res.getPose(referenceSpace);
+        if (pose){
+          model.matrix.fromArray(pose.transform.matrix);
+          model.matrix.decompose(model.position, model.quaternion, model.scale);
+          model.visible = (state==='tracked' || state==='emulated');
+          $("#hint").textContent = model.visible ? 'Bild erkannt.' : 'Suche das Bild…';
+        }
+      }
+    }
+    renderer.render(scene, camera);
+  });
+}
+
+// -------- Bootstrap --------
+initThree();
+
+$("#enter").addEventListener('click', async ()=>{
+  try{
+    if (PAYLOAD.mode === 'surface') await startSurfaceAR();
+    else if (PAYLOAD.mode === 'image') await startImageAR();
+    else throw new Error('Unbekannter Modus: '+PAYLOAD.mode);
+  }catch(e){ showErr(e.message); }
+});
+</script>
+</body>
+</html>
