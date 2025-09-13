@@ -25,16 +25,16 @@
       camera-controls autoplay exposure="1" shadow-intensity="1"
       environment-image="https://modelviewer.dev/shared-assets/environments/neutral.hdr"
       interpolation-decay="200"
-      camera-orbit="0deg 65deg 2.5m"     <!-- angenehmere Perspektive -->
-      field-of-view="35deg"
-      camera-target="0m 1m 0m"           <!-- zentriert auf ~1m Höhe -->
+      camera-orbit="0deg 70deg 3.2m"
+      field-of-view="30deg"
+      camera-target="0m 1m 0m"
       poster="">
       <button slot="ar-button">In AR öffnen</button>
     </model-viewer>
   </div>
 
   <div class="tip">
-    <b>Tipp:</b> Auf Android öffnet sich „Scene Viewer“, auf iOS „Quick Look“.  
+    <b>Tipp:</b> Auf Android öffnet sich „Scene Viewer“, auf iOS „Quick Look“.
   </div>
 
 <script>
@@ -42,7 +42,7 @@
   const sceneUrl = qs.get('scene');
   const showErr = (m)=>{ const el=document.getElementById('err'); el.textContent=m; el.style.display='block'; };
 
-  let cfg = { 
+  let cfg = {
     model:{ url:"https://modelviewer.dev/shared-assets/models/Astronaut.glb", usdzUrl:null },
     target:{ previewUrl:null }
   };
@@ -59,7 +59,6 @@
     const mv = document.getElementById('mv');
     mv.src = cfg.model.url || mv.src;
     if (cfg.model.usdzUrl){ mv.setAttribute('ios-src', cfg.model.usdzUrl); } else { mv.removeAttribute('ios-src'); }
-    // Optional: Poster aus Target-Preview (schöne Lade-Ansicht)
     if (cfg.target?.previewUrl){ mv.setAttribute('poster', cfg.target.previewUrl); }
   })();
 </script>
