@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>AR Studio (MVP) – Projekte, Import, Gizmo</title>
+<title>AR Studio – Projekte · Import · Gizmo · Publish</title>
 
 <!-- THREE + Addons -->
 <script type="importmap">
@@ -14,43 +14,62 @@
   }
 }
 </script>
-<!-- Non-module deps -->
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+
+<!-- deps (klein & robust) -->
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 
 <style>
-  :root{color-scheme:dark light}
+  :root{--bg:#0e1116;--panel:#0b1323;--muted:#94a3b8;--fg:#e9ecf5;--border:#24314a;--accent:#223049}
   *{box-sizing:border-box}
-  html,body{margin:0;height:100%;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:#0b0b0b;color:#eaf0ff}
-  a{color:#a9c7ff}
-  .bar{display:flex;gap:8px;align-items:center;padding:10px 12px;background:#0f1220;border-bottom:1px solid rgba(255,255,255,.08);position:sticky;top:0;z-index:10}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,Segoe UI,Arial}
+
+  /* Topbar */
+  .bar{display:flex;gap:8px;align-items:center;padding:10px 12px;background:var(--panel);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
   .bar .title{font-weight:600}
-  .bar button,.bar select{padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.14);background:#1a1f33;color:#fff}
-  .layout{display:grid;grid-template-columns: minmax(340px,420px) 1fr;gap:14px;min-height:calc(100dvh - 52px);padding:12px}
-  .card{background:#11182a;border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:12px;margin-bottom:12px}
-  h2{margin:4px 0 10px;font-size:14px;opacity:.9}
-  label{display:block;font-size:12px;opacity:.85;margin-top:8px}
+  .bar button,.bar select{padding:8px 10px;border-radius:10px;border:1px solid #2a3347;background:#1a233a;color:#fff}
+  .bar .muted{color:var(--muted)}
+
+  /* Layout */
+  .layout{display:grid;grid-template-columns:minmax(340px,420px) 1fr;gap:14px;min-height:calc(100dvh - 52px);padding:12px}
+  .card{background:#0b1323;border:1px solid var(--border);border-radius:14px;padding:12px;margin-bottom:12px}
+  h2{margin:4px 0 10px;font-size:14px;color:#cbd5e1}
+  label{display:block;font-size:12px;color:#c7d2fe;margin-top:8px}
   input,select,textarea,button{font:inherit}
   input[type="text"],input[type="url"],textarea,select{
-    width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:#0f1324;color:#fff
+    width:100%;padding:10px;border-radius:10px;border:1px solid #27334b;background:#0e1628;color:#e9ecf5
   }
-  input[type="file"]{width:100%;padding:8px;border-radius:10px;border:1px dashed rgba(255,255,255,.25);background:#0f1324;color:#9fb3ff}
+  input[type="file"]{width:100%;padding:8px;border-radius:10px;border:1px dashed #2b3958;background:#0e1628;color:#9fb3ff}
   .row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-  button{padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:#1a1f33;color:#fff;cursor:pointer}
+  button{padding:10px 12px;border-radius:10px;border:1px solid #2a3347;background:#1a233a;color:#fff;cursor:pointer}
   button.primary{background:#2a3569;border-color:#4050a8}
-  .muted{opacity:.8;font-size:12px}
+  .muted{color:#9fb0d0;font-size:12px}
   .warn{color:#ffd27a}
+  .switchRow{display:flex;gap:10px;align-items:center;margin-top:6px}
+  .drop{padding:10px;border:1px dashed #2b3958;border-radius:12px;background:#0e1628;text-align:center}
+  .drop.drag{background:#15204a}
+
   /* Viewport */
   .viewport{position:relative;background:#000;border-radius:14px;overflow:hidden;height:calc(100dvh - 72px)}
   canvas.viewer{display:block;width:100%;height:100%}
   .vpHud{position:absolute;left:8px;top:8px;display:flex;gap:6px;z-index:2}
-  .vpHud .btn{padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(17,20,40,.8);color:#fff}
-  #qr{margin-top:8px;background:#fff;border-radius:12px;display:inline-grid;place-items:center;padding:8px}
-  .switchRow{display:flex;gap:10px;align-items:center;margin-top:6px}
-  .drop{padding:10px;border:1px dashed rgba(255,255,255,.25);border-radius:12px;background:#0f1324;text-align:center}
-  .drop.drag{background:#15204a}
+  .vpHud .btn{padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(17,24,39,.85);color:#fff}
+
+  /* Publish floating panel (aus deinem Snippet) */
+  #pub-toggle{position:fixed;right:16px;bottom:16px;z-index:99998;background:#1f2a44;color:#fff;border:1px solid #2a3347;border-radius:12px;padding:10px 14px;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+  #pub-panel{position:fixed;right:16px;bottom:66px;z-index:99999;width:360px;max-width:92vw;background:#0b1323f2;color:#e9ecf5;border:1px solid #2a3347;border-radius:14px;box-shadow:0 20px 48px rgba(0,0,0,.35);display:none}
+  #pub-panel header{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border)}
+  #pub-panel header b{font:600 14px/1.3 system-ui,Segoe UI,Arial}
+  #pub-panel .body{padding:10px 12px;display:grid;gap:10px}
+  #pub-panel label{display:flex;flex-direction:column;gap:4px;font-size:12px;opacity:.95}
+  #pub-panel input[type="text"], #pub-panel input[type="number"]{background:#0e1628;border:1px solid #27334b;color:#e9ecf5;border-radius:8px;padding:8px}
+  #pub-panel .row{display:flex;gap:8px;align-items:center}
+  #pub-panel .row > *{flex:1}
+  #pub-panel button{background:#223049;border:1px solid #2a3347;color:#e9ecf5;border-radius:10px;padding:8px 10px;cursor:pointer}
+  #pub-panel .muted{opacity:.8;font-size:12px}
+  #pub-qr{display:block;margin:6px auto 0 auto;background:#fff;border-radius:8px;max-width:100%}
 </style>
 </head>
 <body>
@@ -63,7 +82,7 @@
   <button id="saveAsProj">Speichern unter…</button>
   <select id="openList"><option value="">Projekt öffnen…</option></select>
   <button id="delProj">Löschen</button>
-  <div style="margin-left:auto;opacity:.8" id="projInfo">–</div>
+  <span style="margin-left:auto" class="muted" id="projInfo">–</span>
 </div>
 
 <div class="layout">
@@ -71,10 +90,8 @@
   <div>
     <div class="card">
       <h2>Allgemein</h2>
-      <label>Projektname</label>
-      <input id="projName" type="text" placeholder="Mein Projekt">
-      <div class="switchRow" style="margin-top:10px">
-        <strong>Modus:</strong>
+      <label>Projektname<input id="projName" type="text" placeholder="Mein Projekt"></label>
+      <div class="switchRow"><strong>Modus:</strong>
         <label><input type="radio" name="mode" value="image" checked> Image-Tracking</label>
         <label><input type="radio" name="mode" value="surface"> Surface-AR</label>
       </div>
@@ -83,8 +100,7 @@
 
     <div class="card">
       <h2>Modell</h2>
-      <div class="switchRow">
-        <strong>Quelle:</strong>
+      <div class="switchRow"><strong>Quelle:</strong>
         <label><input type="radio" name="mSrc" value="file" checked> Datei</label>
         <label><input type="radio" name="mSrc" value="url"> URL</label>
       </div>
@@ -98,10 +114,8 @@
       </div>
 
       <div id="mUrlBox" style="display:none">
-        <label>GLB URL</label>
-        <input id="modelUrl" type="url" placeholder="https://…/model.glb">
-        <label>USDZ URL (optional, iOS)</label>
-        <input id="usdzUrl" type="url" placeholder="https://…/model.usdz">
+        <label>GLB URL<input id="modelUrl" type="url" placeholder="https://…/model.glb"></label>
+        <label>USDZ URL (optional, iOS)<input id="usdzUrl" type="url" placeholder="https://…/model.usdz"></label>
       </div>
 
       <div class="row2" style="margin-top:8px">
@@ -112,84 +126,75 @@
             <option value="none">keine</option>
           </select>
         </div>
-        <div class="muted" style="align-self:end;text-align:right">Tasten: W/E/R = Move/Rotate/Scale</div>
+        <div class="muted" style="align-self:end;text-align:right">W/E/R = Move/Rotate/Scale</div>
       </div>
     </div>
 
     <div class="card" id="targetCard">
       <h2>Target (nur Image-Modus)</h2>
-      <div class="switchRow">
-        <strong>Quelle:</strong>
+      <div class="switchRow"><strong>Quelle:</strong>
         <label><input type="radio" name="tSrc" value="file" checked> Dateien</label>
         <label><input type="radio" name="tSrc" value="url"> URLs</label>
       </div>
 
       <div id="tFileBox">
-        <label>.mind Datei</label>
-        <input id="targetMindFile" type="file" accept=".mind">
-        <label>Preview-Bild (PNG/JPG)</label>
-        <input id="targetPreviewFile" type="file" accept=".png,.jpg,.jpeg">
+        <label>.mind Datei<input id="targetMindFile" type="file" accept=".mind"></label>
+        <label>Preview-Bild (PNG/JPG)<input id="targetPreviewFile" type="file" accept=".png,.jpg,.jpeg"></label>
       </div>
 
       <div id="tUrlBox" style="display:none">
-        <label>.mind URL</label>
-        <input id="targetMindUrl" type="url" placeholder="/area/assets/targets/target.mind">
-        <label>Preview URL</label>
-        <input id="targetPreviewUrl" type="url" placeholder="/area/assets/targets/target.png">
+        <label>.mind URL<input id="targetMindUrl" type="url" placeholder="/area/assets/targets/target.mind"></label>
+        <label>Preview URL<input id="targetPreviewUrl" type="url" placeholder="/area/assets/targets/target.png"></label>
       </div>
     </div>
 
     <div class="card">
       <h2>Transform</h2>
       <div class="row">
-        <div><label>Pos X</label><input id="px" type="text" value="0"></div>
-        <div><label>Pos Y</label><input id="py" type="text" value="0"></div>
-        <div><label>Pos Z</label><input id="pz" type="text" value="0.05"></div>
+        <label>Pos X<input id="px" type="text" value="0"></label>
+        <label>Pos Y<input id="py" type="text" value="0"></label>
+        <label>Pos Z<input id="pz" type="text" value="0.05"></label>
       </div>
       <div class="row">
-        <div><label>Rot X (°)</label><input id="rx" type="text" value="0"></div>
-        <div><label>Rot Y (°)</label><input id="ry" type="text" value="0"></div>
-        <div><label>Rot Z (°)</label><input id="rz" type="text" value="0"></div>
+        <label>Rot X°<input id="rx" type="text" value="0"></label>
+        <label>Rot Y°<input id="ry" type="text" value="0"></label>
+        <label>Rot Z°<input id="rz" type="text" value="0"></label>
       </div>
       <div class="row">
-        <div><label>Scale X</label><input id="sx" type="text" value="0.6"></div>
-        <div><label>Scale Y</label><input id="sy" type="text" value="0.6"></div>
-        <div><label>Scale Z</label><input id="sz" type="text" value="0.6"></div>
+        <label>Scale X<input id="sx" type="text" value="0.6"></label>
+        <label>Scale Y<input id="sy" type="text" value="0.6"></label>
+        <label>Scale Z<input id="sz" type="text" value="0.6"></label>
       </div>
     </div>
 
     <div class="card">
       <h2>Licht</h2>
       <div class="row2">
-        <div><label>Hemisphere</label><input id="hemi" type="text" value="1.2"></div>
-        <div><label>Directional</label><input id="dirI" type="text" value="1.0"></div>
+        <label>Hemisphere<input id="hemi" type="text" value="1.2"></label>
+        <label>Directional<input id="dirI" type="text" value="1.0"></label>
       </div>
       <div class="row">
-        <div><label>Dir X</label><input id="dx" type="text" value="0"></div>
-        <div><label>Dir Y</label><input id="dy" type="text" value="6"></div>
-        <div><label>Dir Z</label><input id="dz" type="text" value="0"></div>
+        <label>Dir X<input id="dx" type="text" value="0"></label>
+        <label>Dir Y<input id="dy" type="text" value="6"></label>
+        <label>Dir Z<input id="dz" type="text" value="0"></label>
       </div>
     </div>
 
     <div class="card">
       <h2>Meta</h2>
-      <label>Titel</label>
-      <input id="title" type="text" value="AR-Erlebnis starten">
-      <label>Hinweise (eine pro Zeile)</label>
-      <textarea id="tips" rows="3">Achten Sie auf Ihre Umgebung.</textarea>
+      <label>Titel<input id="title" type="text" value="AR-Erlebnis starten"></label>
+      <label>Hinweise (eine pro Zeile)<textarea id="tips" rows="3">Achten Sie auf Ihre Umgebung.</textarea></label>
     </div>
 
     <div class="card">
-      <h2>Export & Links</h2>
-      <label>Slug (Ordner unter <code>scenes/published/&lt;slug&gt;</code>)</label>
-      <input id="slug" type="text" placeholder="demo-project">
+      <h2>Export</h2>
+      <label>Slug (Ordner unter <code>scenes/published/&lt;slug&gt;</code>)
+        <input id="slug" type="text" placeholder="demo-project">
+      </label>
       <div class="actions">
         <button id="btnZip" class="primary">ZIP: scene.json + Dateien</button>
-        <button id="btnLinks">Viewer-Links + QR</button>
+        <span class="muted">ZIP entpacken und Inhalt nach <b>scenes/published/&lt;slug&gt;/</b> committen (Branch <b>@scenes</b>).</span>
       </div>
-      <div id="links"></div>
-      <div id="qr"></div>
-      <p class="muted">ZIP entpacken und Inhalt nach <code>scenes/published/&lt;slug&gt;/</code> committen (Branch <b>@scenes</b>).</p>
     </div>
   </div>
 
@@ -205,13 +210,42 @@
   </div>
 </div>
 
+<!-- ======== PUBLISH PANEL (kombiniert) ======== -->
+<button id="pub-toggle" title="Publish (Surface/Image AR)">Publish</button>
+<aside id="pub-panel" role="dialog" aria-modal="false" aria-label="Publish">
+  <header>
+    <b>Publish – WebAR Link</b>
+    <div style="flex:1"></div>
+    <button id="pub-close" title="Schließen" style="padding:6px 8px;border-radius:8px">✕</button>
+  </header>
+  <div class="body">
+    <div class="section">
+      <h4>Viewer-Ziel & Slug</h4>
+      <label>Slug (muss in <code>scenes/published/&lt;slug&gt;/scene.json</code> vorhanden sein)
+        <input id="pub-slug" type="text" placeholder="demo-project">
+      </label>
+      <div class="row">
+        <button id="pub-image">Image-AR Link</button>
+        <button id="pub-surface-webxr">Surface-AR (WebXR)</button>
+        <button id="pub-surface-native">Surface-AR (Native)</button>
+      </div>
+      <p class="muted">Die Links referenzieren deine vorhandenen Viewer und laden die <code>scene.json</code> über jsDelivr (@scenes).</p>
+    </div>
+
+    <label>Link
+      <input id="pub-link" type="text" readonly placeholder="Hier erscheint der Link…">
+    </label>
+    <canvas id="pub-qr" width="0" height="0"></canvas>
+    <div class="muted">Tipp: Nach neuem Commit bei jsDelivr ggf. <code>?v=2</code> anhängen (Cache), falls du sofort testen willst.</div>
+  </div>
+</aside>
+
 <script type="module">
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {TransformControls} from 'three/addons/controls/TransformControls.js';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
-// IndexedDB helper (small wrapper)
-import {get,set,del,keys} from 'https://cdn.jsdelivr.net/npm/idb-keyval@6/dist/esm/index.js';
+import {get,set,del} from 'https://cdn.jsdelivr.net/npm/idb-keyval@6/dist/esm/index.js';
 
 const $ = s=>document.querySelector(s);
 const num = (v,f=0)=>{ const n=Number(v); return Number.isFinite(n)?n:f; };
@@ -220,7 +254,6 @@ const uuid = ()=>crypto.randomUUID?.():Math.random().toString(36).slice(2);
 // ---------- Project state ----------
 let project = null;         // current project JSON
 let blobs = {};             // {fileId: Blob}
-let objectURL = {};         // {fileId: blobURL}
 let modelObj = null, mixer=null, gltfAnims=[];
 const DB_PREFIX = 'area-studio:';
 const PROJ_LIST_KEY = DB_PREFIX+'projects';
@@ -277,6 +310,7 @@ function resize(){
     camera.aspect = w/h; camera.updateProjectionMatrix();
   }
 }
+const clock = new THREE.Clock();
 function animate(){
   resize();
   const dt = clock.getDelta();
@@ -285,34 +319,31 @@ function animate(){
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
 }
-const clock = new THREE.Clock();
 animate();
 
 // ---------- Loaders ----------
 const loader = new GLTFLoader();
 
-async function getBlobURL(fileId){
-  if (!fileId) return '';
-  if (objectURL[fileId]) return objectURL[fileId];
-  const blob = blobs[fileId] || await get(DB_PREFIX+'file:'+fileId);
-  if (!blob) return '';
-  blobs[fileId] = blob;
-  const url = URL.createObjectURL(blob);
-  objectURL[fileId] = url;
-  return url;
-}
+// helper: blob -> url
+async function blobUrlFrom(file){ return URL.createObjectURL(file); }
 
+// ---------- Model laden ----------
 async function loadModelForViewport(){
-  // clear old
-  if (modelObj){ tControls.detach(); scene.remove(modelObj); modelObj.traverse(o=>{ if (o.isMesh) o.geometry?.dispose(); }); modelObj=null; mixer=null; gltfAnims=[]; }
+  if (modelObj){
+    tControls.detach();
+    scene.remove(modelObj);
+    modelObj.traverse(o=>{ if (o.isMesh) o.geometry?.dispose(); });
+    modelObj=null; mixer=null; gltfAnims=[];
+  }
   let src = '';
   if (project.model.source==='file' && project.model.fileId){
-    src = await getBlobURL(project.model.fileId);
-  }else if (project.model.source==='url' && project.model.url){
+    const file = blobs[project.model.fileId] || await get(DB_PREFIX+'file:'+project.model.fileId);
+    if (!file) return;
+    src = await blobUrlFrom(file);
+  } else if (project.model.source==='url' && project.model.url){
     src = project.model.url;
-  }else{
-    return;
-  }
+  } else { return; }
+
   loader.load(src, (gltf)=>{
     modelObj = gltf.scene;
     gltfAnims = gltf.animations||[];
@@ -346,7 +377,6 @@ function syncTransformFromObject(){
   project.transform.scale    = [s.x, s.y, s.z];
   updateTransformInputs();
 }
-
 function updateTransformInputs(){
   const t = project.transform;
   $('#px').value=t.position[0]; $('#py').value=t.position[1]; $('#pz').value=t.position[2];
@@ -360,23 +390,33 @@ function readTransformFromInputs(){
   t.scale   =[num($('#sx').value,1),num($('#sy').value,1),num($('#sz').value,1)];
   applyTransformToObject();
 }
-['#px','#py','#pz','#rx','#ry','#rz','#sx','#sy','#sz'].forEach(sel=>{
-  $(sel).addEventListener('change', readTransformFromInputs);
-});
+['#px','#py','#pz','#rx','#ry','#rz','#sx','#sy','#sz'].forEach(sel=> $(sel).addEventListener('change', readTransformFromInputs));
 
 // Gizmo mode + keys
-function setGizmoMode(m){ tControls.setMode(m); }
+const setGizmoMode = m => tControls.setMode(m);
 $('#modeT').addEventListener('click', ()=>setGizmoMode('translate'));
 $('#modeR').addEventListener('click', ()=>setGizmoMode('rotate'));
 $('#modeS').addEventListener('click', ()=>setGizmoMode('scale'));
 window.addEventListener('keydown', (e)=>{
-  if (e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA') return;
-  if (e.key==='w' || e.key==='W') setGizmoMode('translate');
-  if (e.key==='e' || e.key==='E') setGizmoMode('rotate');
-  if (e.key==='r' || e.key==='R') setGizmoMode('scale');
+  if (['INPUT','TEXTAREA'].includes(e.target.tagName)) return;
+  if (e.key==='w'||e.key==='W') setGizmoMode('translate');
+  if (e.key==='e'||e.key==='E') setGizmoMode('rotate');
+  if (e.key==='r'||e.key==='R') setGizmoMode('scale');
 });
 
-// ---------- UI wiring ----------
+// Lighting inputs
+['#hemi','#dirI','#dx','#dy','#dz'].forEach(sel=>{
+  $(sel).addEventListener('change', ()=>{
+    project.lighting.hemi = num($('#hemi').value,1.0);
+    project.lighting.dir.intensity = num($('#dirI').value,1.0);
+    project.lighting.dir.pos = [num($('#dx').value),num($('#dy').value),num($('#dz').value)];
+    hemi.intensity = project.lighting.hemi;
+    dir.intensity = project.lighting.dir.intensity;
+    const [x,y,z]=project.lighting.dir.pos; dir.position.set(x,y,z);
+  });
+});
+
+// Model source switching + drag&drop
 function toggleSourceBoxes(){
   const mFile = document.querySelector('input[name="mSrc"][value="file"]').checked;
   $('#mFileBox').style.display = mFile?'':'none';
@@ -391,12 +431,6 @@ document.querySelectorAll('input[name="mSrc"],input[name="tSrc"]').forEach(r=>r.
   toggleSourceBoxes();
 }));
 
-document.querySelectorAll('input[name="mode"]').forEach(r=>r.addEventListener('change', e=>{
-  project.mode = e.target.value;
-  $('#targetCard').style.display = project.mode==='image' ? '' : 'none';
-}));
-
-// Drag & drop for GLB
 const drop = $('#dropGlb');
 ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation();drop.classList.add('drag');}));
 ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation();drop.classList.remove('drag');}));
@@ -405,23 +439,19 @@ drop.addEventListener('drop', async (e)=>{
   if (!file) return;
   await importGLBFile(file);
 });
-
-// File inputs
-$('#modelFile').addEventListener('change', async e=>{
-  const f = e.target.files[0]; if (f) await importGLBFile(f);
-});
+$('#modelFile').addEventListener('change', async e=>{ const f=e.target.files[0]; if(f) await importGLBFile(f); });
 $('#usdzFile').addEventListener('change', async e=>{
-  const f = e.target.files[0]; if (!f) return;
+  const f=e.target.files[0]; if(!f) return;
   const id = uuid(); blobs[id]=f; await set(DB_PREFIX+'file:'+id, f);
   project.model.usdzFileId=id; project.model.usdzFileName=f.name||'model.usdz';
 });
 $('#targetMindFile').addEventListener('change', async e=>{
-  const f = e.target.files[0]; if (!f) return;
+  const f=e.target.files[0]; if(!f) return;
   const id=uuid(); blobs[id]=f; await set(DB_PREFIX+'file:'+id, f);
   project.target.mindFileId=id; project.target.mindName=f.name||'target.mind';
 });
 $('#targetPreviewFile').addEventListener('change', async e=>{
-  const f = e.target.files[0]; if (!f) return;
+  const f=e.target.files[0]; if(!f) return;
   const id=uuid(); blobs[id]=f; await set(DB_PREFIX+'file:'+id, f);
   project.target.previewFileId=id; project.target.previewName=f.name||'target.png';
 });
@@ -429,8 +459,6 @@ $('#modelUrl').addEventListener('change', e=>{ project.model.url = e.target.valu
 $('#usdzUrl').addEventListener('change', e=>{ project.model.usdzUrl = e.target.value.trim(); });
 $('#targetMindUrl').addEventListener('change', e=>{ project.target.mindUrl = e.target.value.trim(); });
 $('#targetPreviewUrl').addEventListener('change', e=>{ project.target.previewUrl = e.target.value.trim(); });
-
-$('#animName').addEventListener('change', e=>{ project.model.animation = e.target.value; loadModelForViewport(); });
 
 function refreshAnimDropdown(){
   const box = $('#animName');
@@ -444,25 +472,8 @@ function refreshAnimDropdown(){
     project.model.animation = box.value;
   }
 }
+$('#animName').addEventListener('change', e=>{ project.model.animation = e.target.value; loadModelForViewport(); });
 
-// Lighting inputs
-['#hemi','#dirI','#dx','#dy','#dz'].forEach(sel=>{
-  $(sel).addEventListener('change', ()=>{
-    project.lighting.hemi = num($('#hemi').value,1.0);
-    project.lighting.dir.intensity = num($('#dirI').value,1.0);
-    project.lighting.dir.pos = [num($('#dx').value),num($('#dy').value),num($('#dz').value)];
-    hemi.intensity = project.lighting.hemi;
-    dir.intensity = project.lighting.dir.intensity;
-    const [x,y,z]=project.lighting.dir.pos; dir.position.set(x,y,z);
-  });
-});
-
-// Meta inputs
-$('#projName').addEventListener('change', e=>{ project.name = e.target.value||'Unbenannt'; updateBar(); });
-$('#title').addEventListener('change', e=>{ project.meta.title = e.target.value; });
-$('#tips').addEventListener('change', e=>{ project.meta.tips = e.target.value.split('\n').map(s=>s.trim()).filter(Boolean); });
-
-// ---------- Import helpers ----------
 async function importGLBFile(file){
   const id = uuid();
   blobs[id]=file; await set(DB_PREFIX+'file:'+id, file);
@@ -472,14 +483,16 @@ async function importGLBFile(file){
   await loadModelForViewport();
 }
 
-// ---------- Build scene.json ----------
-function buildSceneJSON(){
+// ---------- scene.json ----------
+function buildSceneJSON(relPathsForZip=false){
   const scene = {
     meta: { version:'1.0', mode: project.mode, title: project.meta.title, tips: project.meta.tips },
     model: {
-      url: project.model.source==='url' ? (project.model.url||'') : './'+(project.model.fileName||'model.glb'),
-      usdzUrl: (project.model.usdzSource==='url' ? (project.model.usdzUrl||'') :
-               (project.model.usdzFileId? './'+(project.model.usdzFileName||'model.usdz') : undefined)),
+      url: project.model.source==='url' ? (project.model.url||'') :
+           (relPathsForZip ? './'+(project.model.fileName||'model.glb') : ''),
+      usdzUrl: (project.model.usdzFileId
+                ? (relPathsForZip ? './'+(project.model.usdzFileName||'model.usdz') : '')
+                : (project.model.usdzUrl||'')) || undefined,
       position: project.transform.position,
       rotation: project.transform.rotation,
       scale:    project.transform.scale,
@@ -490,10 +503,8 @@ function buildSceneJSON(){
   };
   if (project.mode==='image'){
     scene.target = {
-      mindUrl: project.target.mindSource==='url' ? (project.target.mindUrl||'') :
-               (project.target.mindFileId? './'+(project.target.mindName||'target.mind') : ''),
-      previewUrl: project.target.previewSource==='url' ? (project.target.previewUrl||'') :
-                  (project.target.previewFileId? './'+(project.target.previewName||'target.png') : '')
+      mindUrl: (project.target.mindFileId ? (relPathsForZip ? './'+(project.target.mindName||'target.mind') : '') : (project.target.mindUrl||'')),
+      previewUrl: (project.target.previewFileId ? (relPathsForZip ? './'+(project.target.previewName||'target.png') : '') : (project.target.previewUrl||''))
     };
   }
   return scene;
@@ -503,11 +514,10 @@ function buildSceneJSON(){
 async function exportZIP(){
   const slug = $('#slug').value.trim()||'scene';
   const zip = new JSZip();
-  const scene = buildSceneJSON();
+  const scene = buildSceneJSON(true);
   zip.file('scene.json', JSON.stringify(scene,null,2));
 
-  // add files from IndexedDB
-  if (project.model.source==='file' && project.model.fileId){
+  if (project.model.fileId){
     const b = blobs[project.model.fileId] || await get(DB_PREFIX+'file:'+project.model.fileId);
     if (b) zip.file(project.model.fileName||'model.glb', b);
   }
@@ -531,32 +541,9 @@ async function exportZIP(){
   a.download = `${slug}.zip`; a.href = URL.createObjectURL(blob); a.click();
   URL.revokeObjectURL(a.href);
 }
+$('#btnZip').addEventListener('click', exportZIP);
 
-// ---------- Links + QR ----------
-function makeLinks(){
-  const slug = $('#slug').value.trim();
-  const wrap = $('#links'); const qr = $('#qr'); wrap.innerHTML=''; qr.innerHTML='';
-  if (!slug){ wrap.innerHTML='<p class="warn">Bitte Slug eingeben.</p>'; return; }
-  const sceneUrl = `https://cdn.jsdelivr.net/gh/krischihh/area@scenes/scenes/published/${encodeURIComponent(slug)}/scene.json`;
-  const enc = encodeURIComponent(sceneUrl);
-  const base = 'https://krischihh.github.io/area';
-  const urls = {
-    'Image-Viewer':   `${base}/image-ar/viewer.html?scene=${enc}`,
-    'Surface (WebXR)':`${base}/surface-ar/webxr.html?scene=${enc}`,
-    'Surface (Native)':`${base}/surface-ar/index.html?scene=${enc}`
-  };
-  for (const [label,href] of Object.entries(urls)){
-    const a = document.createElement('a'); a.href=href; a.target='_blank'; a.textContent=label+': '+href; wrap.appendChild(a); wrap.appendChild(document.createElement('br'));
-  }
-  const canvas = document.createElement('canvas');
-  QRCode.toCanvas(canvas, urls['Image-Viewer'], {errorCorrectionLevel:'M', margin:1, scale:8}, ()=>{
-    const vis=document.createElement('canvas'); vis.width=220; vis.height=220;
-    const ctx=vis.getContext('2d'); ctx.imageSmoothingEnabled=false; ctx.drawImage(canvas,0,0,vis.width,vis.height);
-    qr.appendChild(vis);
-  });
-}
-
-// ---------- Projects in IndexedDB ----------
+// ---------- Projects (IndexedDB) ----------
 async function saveProject(asNew=false){
   if (asNew || !project.id) project.id = uuid();
   project.name = $('#projName').value.trim() || 'Unbenannt';
@@ -572,7 +559,7 @@ async function saveProject(asNew=false){
   updateBar();
 }
 async function refreshOpenList(){
-  const list = await get(PROJ_LIST_KEY) || [];
+  const list = (await get(PROJ_LIST_KEY)) || [];
   list.sort((a,b)=>b.updatedAt-a.updatedAt);
   const sel = $('#openList'); sel.innerHTML='<option value="">Projekt öffnen…</option>';
   list.forEach(p=>{
@@ -591,56 +578,84 @@ async function deleteProject(){
   if (!project?.id) return;
   if (!confirm('Projekt löschen?')) return;
   await del(DB_PREFIX+'project:'+project.id);
-  let list = await get(PROJ_LIST_KEY) || [];
+  let list = (await get(PROJ_LIST_KEY)) || [];
   list = list.filter(p=>p.id!==project.id); await set(PROJ_LIST_KEY, list);
   project = defaultProject();
   fillUIFromProject(); await refreshOpenList(); await loadModelForViewport();
 }
 
-function updateBar(){
-  $('#projInfo').textContent = project?.name ? `Projekt: ${project.name}` : '–';
-}
-
+function updateBar(){ $('#projInfo').textContent = project?.name ? `Projekt: ${project.name}` : '–'; }
 function fillUIFromProject(){
   $('#projName').value = project.name || 'Unbenannt';
   document.querySelector(`input[name="mode"][value="${project.mode||'image'}"]`).checked = true;
   $('#targetCard').style.display = project.mode==='image' ? '' : 'none';
-  // sources
   document.querySelector(`input[name="mSrc"][value="${project.model.source||'file'}"]`).checked = true;
   document.querySelectorAll('input[name="tSrc"]').forEach(r=> r.checked = (r.value === (project.target.mindSource||'file')));
   toggleSourceBoxes();
-  // urls
   $('#modelUrl').value = project.model.url||'';
   $('#usdzUrl').value = project.model.usdzUrl||'';
   $('#targetMindUrl').value = project.target.mindUrl||'';
   $('#targetPreviewUrl').value = project.target.previewUrl||'';
-  // transform
   updateTransformInputs();
-  // lighting
   $('#hemi').value = project.lighting.hemi; $('#dirI').value = project.lighting.dir.intensity;
   $('#dx').value = project.lighting.dir.pos[0]; $('#dy').value = project.lighting.dir.pos[1]; $('#dz').value = project.lighting.dir.pos[2];
-  // meta
   $('#title').value = project.meta.title||''; $('#tips').value = (project.meta.tips||[]).join('\n');
   updateBar();
 }
 
-// ---------- Top bar wiring ----------
-$('#newProj').addEventListener('click', async ()=>{
-  project = defaultProject(); fillUIFromProject(); await loadModelForViewport();
-});
+// Topbar Events
+$('#newProj').addEventListener('click', async ()=>{ project = defaultProject(); fillUIFromProject(); await loadModelForViewport(); });
 $('#saveProj').addEventListener('click', ()=>saveProject(false));
 $('#saveAsProj').addEventListener('click', ()=>saveProject(true));
 $('#openList').addEventListener('change', async e=>{ if (e.target.value) await openProject(e.target.value); });
 $('#delProj').addEventListener('click', deleteProject);
 
-// Export + Links
-$('#btnZip').addEventListener('click', exportZIP);
-$('#btnLinks').addEventListener('click', makeLinks);
-
 // Init
 project = defaultProject();
 fillUIFromProject();
 await refreshOpenList();
+await loadModelForViewport();
+
+// ---------- Publish Panel: Links + QR (nutzt deine Viewer + jsDelivr) ----------
+const pubToggle = $('#pub-toggle'), pubPanel = $('#pub-panel'), pubClose = $('#pub-close');
+pubToggle.addEventListener('click', ()=>{ pubPanel.style.display = (pubPanel.style.display==='block') ? 'none' : 'block'; });
+pubClose.addEventListener('click', ()=> pubPanel.style.display='none');
+
+function sceneUrlFromSlug(slug){
+  if (!slug) return '';
+  return `https://cdn.jsdelivr.net/gh/krischihh/area@scenes/scenes/published/${encodeURIComponent(slug)}/scene.json`;
+}
+function drawQR(text){
+  const cnv = $('#pub-qr'); if (!window.QRCode || !cnv) return;
+  QRCode.toCanvas(cnv, text, { errorCorrectionLevel:'L', width: 280, margin:1 }, ()=>{});
+}
+function setLinkOut(url){
+  const out = $('#pub-link'); out.value = url || '—';
+  if (url) drawQR(url);
+}
+
+// Buttons
+$('#pub-image').addEventListener('click', ()=>{
+  const slug = $('#pub-slug').value.trim();
+  if (!slug) return setLinkOut('Bitte Slug eingeben.');
+  const scene = sceneUrlFromSlug(slug);
+  const url = `https://krischihh.github.io/area/image-ar/viewer.html?scene=${encodeURIComponent(scene)}`;
+  setLinkOut(url);
+});
+$('#pub-surface-webxr').addEventListener('click', ()=>{
+  const slug = $('#pub-slug').value.trim();
+  if (!slug) return setLinkOut('Bitte Slug eingeben.');
+  const scene = sceneUrlFromSlug(slug);
+  const url = `https://krischihh.github.io/area/surface-ar/webxr.html?scene=${encodeURIComponent(scene)}`;
+  setLinkOut(url);
+});
+$('#pub-surface-native').addEventListener('click', ()=>{
+  const slug = $('#pub-slug').value.trim();
+  if (!slug) return setLinkOut('Bitte Slug eingeben.');
+  const scene = sceneUrlFromSlug(slug);
+  const url = `https://krischihh.github.io/area/surface-ar/index.html?scene=${encodeURIComponent(scene)}`;
+  setLinkOut(url);
+});
 </script>
 </body>
 </html>
