@@ -1,0 +1,25 @@
+{
+  "meta": {
+    "version": "1.0",
+    "mode": "image",
+    "title": "AR-Erlebnis starten",
+    "tips": [
+      "Achten Sie auf Ihre Umgebung.",
+      "Halten Sie das Gerät ruhig und richten Sie es auf das Bild.",
+      "Sorgen Sie für gute Beleuchtung."
+    ]
+  },
+  "target": {
+    "mindUrl": "https://krischihh.github.io/area/assets/targets/target.mind",
+    "previewUrl": "https://krischihh.github.io/area/assets/targets/target.png"
+  },
+  "model": {
+    "url": "https://modelviewer.dev/shared-assets/models/Astronaut.glb",
+    "position": [0, 0, 0.05],
+    "rotation": [0, 0, 0],
+    "scale": [0.6, 0.6, 0.6],
+    "animation": "*"
+  },
+  "lighting": { "hemi": 1.2, "dir": { "intensity": 1.0, "pos": [0, 6, 0] } },
+  "audio": { "url": null, "loop": true, "volume": 0.8, "autoplayOnTarget": false }
+}
