@@ -3,7 +3,13 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<title>Image Viewer – AR (Aero-Flow, robuster Fallback)</title>
+<title>Image Viewer – AR (schneller Scanner-Start)</title>
+
+<!-- Preconnects, damit Ressourcen schneller kommen -->
+<link rel="preconnect" href="https://aframe.io" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="preconnect" href="https://unpkg.com" crossorigin>
+
 <style>
   *,*::before,*::after{box-sizing:border-box}
   html,body{
@@ -24,7 +30,7 @@
 
   a-scene{position:fixed;inset:0;z-index:1}
 
-  /* --- Eigenes Scanner-UI --- */
+  /* --- Eigenes Scanner-UI (sichtbar bis targetFound) --- */
   #scanUI{
     position:fixed;inset:0;z-index:2;pointer-events:none;display:none;
     padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right))
@@ -57,7 +63,7 @@
     padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right))
             max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
     background:linear-gradient(180deg,rgba(0,0,0,.55),rgba(0,0,0,.35));
-    transition:opacity .18s ease-out, visibility .18s ease-out
+    transition:opacity .12s ease-out, visibility .12s ease-out; /* schneller */
   }
   #overlay.hidden{opacity:0;visibility:hidden}
   .card{
@@ -72,9 +78,10 @@
   .tips li{margin:2px 0}
   .btn{padding:12px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:#111;color:#fff;width:100%}
 
-  /* Error-Badge (nur für echte Fehler, nicht für "Video nicht gefunden") */
+  /* Error-Badge */
   #err{position:fixed;left:12px;top:12px;z-index:4;background:#b00020;padding:8px 10px;border-radius:8px;display:none;font:12px/1.35 monospace}
 
+  /* Fallback für Browser ohne svh */
   @supports not (height:100svh){
     html,body,#videoLayer,a-scene{height:calc(var(--vh,1vh)*100)}
   }
@@ -143,7 +150,7 @@ let cfg = {
   if (!sceneUrl){ showErr('Fehlender Parameter ?scene=<URL zu scene.json>'); }
   else {
     try {
-      const res = await fetch(sceneUrl, {cache:'no-store'});
+      const res = await fetch(sceneUrl, {cache:'no-cache'}); // keine harte "no-store" Bremse
       if (!res.ok) throw new Error(res.status+' '+res.statusText);
       const j = await res.json();
       cfg = Object.assign({}, cfg, j, {
@@ -154,9 +161,10 @@ let cfg = {
       });
     } catch(e){ showErr('scene.json konnte nicht geladen werden: '+e.message); }
   }
+  // Bilder/Texts setzen (stabile Cache-Buster-Variante)
   const prev = cfg.target?.previewUrl || "/area/assets/targets/target.png";
-  document.getElementById('hintImg').src    = prev + '?v=' + Date.now();
-  document.getElementById('overlayImg').src = prev + '?v=' + Date.now();
+  document.getElementById('hintImg').src    = prev + (prev.includes('?')?'&':'?') + 'v=1';
+  document.getElementById('overlayImg').src = prev + (prev.includes('?')?'&':'?') + 'v=1';
   if (cfg.meta?.title) document.getElementById('overlayTitle').textContent = cfg.meta.title;
   if (Array.isArray(cfg.meta?.tips) && cfg.meta.tips.length){
     document.getElementById('overlayTips').innerHTML = cfg.meta.tips.map(t=>`<li>${t}</li>`).join('');
@@ -196,28 +204,23 @@ function stopPreview(){
   previewVideo.style.display = 'none';
 }
 
-/* ------------ MindAR-Video optional übernehmen ------------ */
-function findMindarVideo(){
-  return document.getElementById('mindar-image-video')
-      || document.querySelector('video#mindar-image-video')
-      || [...document.querySelectorAll('video')].find(el => /mindar/i.test(el.id));
-}
-async function tryAttachMindarVideo(maxWaitMs=8000){
+/* ------------ MindAR-Video optional übernehmen (nicht blockierend) ------------ */
+function tryAttachMindarVideoNonBlocking(maxWaitMs=4000){
   const t0 = performance.now();
-  return new Promise(resolve=>{
-    (function poll(){
-      const v = findMindarVideo();
-      if (v){
-        v.setAttribute('playsinline',''); v.muted = true; v.autoplay = true;
-        if (v.parentNode !== videoLayer) videoLayer.appendChild(v);
-        Object.assign(v.style,{position:'absolute',inset:'0',width:'100%',height:'100%',objectFit:'cover',objectPosition:'center',display:'block'});
-        stopPreview(); // jetzt Preview beenden
-        return resolve(true);
-      }
-      if (performance.now() - t0 > maxWaitMs) return resolve(false); // kein Fehler mehr!
-      requestAnimationFrame(poll);
-    })();
-  });
+  (function poll(){
+    const v = document.getElementById('mindar-image-video')
+         || document.querySelector('video#mindar-image-video')
+         || [...document.querySelectorAll('video')].find(el => /mindar/i.test(el.id));
+    if (v){
+      v.setAttribute('playsinline',''); v.muted = true; v.autoplay = true;
+      if (v.parentNode !== videoLayer) videoLayer.appendChild(v);
+      Object.assign(v.style,{position:'absolute',inset:'0',width:'100%',height:'100%',objectFit:'cover',objectPosition:'center',display:'block'});
+      stopPreview(); // jetzt Preview beenden
+      return;
+    }
+    if (performance.now() - t0 > maxWaitMs) return; // einfach weiter mit Preview
+    requestAnimationFrame(poll);
+  })();
 }
 
 /* ------------ Flow: Overlay → MindAR lazy starten ------------ */
@@ -267,48 +270,39 @@ async function buildAndStartMindAR(){
   scene.appendChild(marker);
   document.body.appendChild(scene);
 
-  // Audio (optional)
-  let audioEl = null;
-  if (cfg.audio?.url){
-    audioEl = document.createElement('audio');
-    audioEl.src = cfg.audio.url; audioEl.loop = !!cfg.audio.loop;
-    audioEl.volume = typeof cfg.audio.volume==='number' ? cfg.audio.volume : 0.8;
-    document.body.appendChild(audioEl);
-  }
-
   // Scanner/Hint steuern
   const showScanning = ()=>{ scanUI.style.display='block'; hint.style.display='block'; };
   const hideScanning = ()=>{ scanUI.style.display='none';  hint.style.display='none';  };
   marker.addEventListener('targetFound', hideScanning);
   marker.addEventListener('targetLost',  showScanning);
 
-  // Starten
-  await new Promise(res => scene.addEventListener('loaded', res, {once:true}));
-  const sys = scene.systems['mindar-image-system'];
-  try {
-    await sys.start();
-  } catch (e) {
-    showErr('MindAR konnte nicht gestartet werden: ' + e.message);
-    return; // echter Fehler -> abbrechen
-  }
+  // MindAR parallel starten – UI blockiert NICHT
+  scene.addEventListener('loaded', async ()=>{
+    const sys = scene.systems['mindar-image-system'];
+    try {
+      await sys.start();
+    } catch (e) {
+      showErr('MindAR konnte nicht gestartet werden: ' + e.message);
+      return;
+    }
+    // MindAR-Video optional übernehmen (nicht blockierend)
+    tryAttachMindarVideoNonBlocking(4000);
 
-  // MindAR-Video optional übernehmen; wenn nicht vorhanden, kein Abbruch
-  const attached = await tryAttachMindarVideo(8000);
-  if (!attached){
-    console.warn('MindAR-Video nicht gefunden – Preview bleibt aktiv (Fallback).');
-  }
-
-  showScanning(); // Eigenes Scan-UI + Hint anzeigen
-
-  // Akku sparen
-  document.addEventListener('visibilitychange', () => {
-    try { document.hidden ? sys.stop() : sys.start(); } catch {}
-  }, {passive:true});
+    // Akku sparen
+    document.addEventListener('visibilitychange', () => {
+      try { document.hidden ? sys.stop() : sys.start(); } catch {}
+    }, {passive:true});
+  }, {once:true});
 }
 
-startBtn.addEventListener('click', async ()=>{
+startBtn.addEventListener('click', ()=>{
+  // 1) Overlay sofort ausblenden
   overlay.classList.add('hidden');
-  await buildAndStartMindAR(); // kein harter Fehler mehr, wenn Video nicht gefunden
+  // 2) Scanner-UI + Hint SOFORT anzeigen (kein Warten mehr)
+  scanUI.style.display = 'block';
+  hint.style.display   = 'block';
+  // 3) MindAR im Hintergrund initialisieren
+  buildAndStartMindAR();
 });
 </script>
 </body>
