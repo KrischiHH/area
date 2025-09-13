@@ -1,284 +1,2994 @@
 <!doctype html>
 <html lang="de">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Editor with Publish (Standalone, alles inline)</title>
-  <style>
-    :root { --bg:#0e1116; --panel:#0b1323; --muted:#94a3b8; --fg:#e9ecf5; --border:#24314a; --accent:#223049; }
-    html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,Segoe UI,Arial}
-    header.top{display:flex;align-items:center;gap:12px;padding:12px;background:var(--panel);border-bottom:1px solid var(--border)}
-    header.top b{font-weight:600}
-    header.top .muted{color:var(--muted)}
-    main{padding:12px}
-    .hidden{display:none!important}
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>WebAR Editor V2.1.7</title>
 
-    /* Publish Panel */
-    #pub-toggle{position:fixed;right:16px;bottom:16px;z-index:99998;background:#1f2a44;color:#fff;
-      border:1px solid #2a3347;border-radius:12px;padding:10px 14px;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.25)}
-    #pub-panel{position:fixed;right:16px;bottom:66px;z-index:99999;width:360px;max-width:92vw;background:#0b1323f2;color:#e9ecf5;
-      border:1px solid #2a3347;border-radius:14px;box-shadow:0 20px 48px rgba(0,0,0,.35);display:none}
-    #pub-panel header{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border)}
-    #pub-panel header b{font:600 14px/1.3 system-ui,Segoe UI,Arial}
-    #pub-panel .body{padding:10px 12px;display:grid;gap:10px}
-    #pub-panel label{display:flex;flex-direction:column;gap:4px;font-size:12px;opacity:.95}
-    #pub-panel input[type="text"], #pub-panel input[type="number"]{background:#0e1628;border:1px solid #27334b;color:#e9ecf5;
-      border-radius:8px;padding:8px}
-    #pub-panel .row{display:flex;gap:8px;align-items:center}
-    #pub-panel .row > *{flex:1}
-    #pub-panel button{background:#223049;border:1px solid #2a3347;color:#e9ecf5;border-radius:10px;padding:8px 10px;cursor:pointer}
-    #pub-panel .muted{opacity:.8;font-size:12px}
-    #pub-qr{display:block;margin:6px auto 0 auto; background:#fff; border-radius:8px; max-width:100%}
+<style>
+  :root{--bg:#0e1116;--panel:#1a2130;--panel2:#223049;--text:#e9ecf5;--muted:#9fb3d9;--border:#2a3347;--accent:#60a5fa}
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,Segoe UI,Inter,Roboto,Arial,sans-serif}
+  .top{height:54px;display:flex;gap:8px;align-items:center;padding:0 12px;background:var(--panel);border-bottom:1px solid var(--border);position:relative;z-index:100}
+  .brand{font-weight:800}
+  .sp{flex:1}
+  .btn{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:8px;cursor:pointer;font-weight:700}
+  .btn:hover{border-color:var(--accent)}
+  .wrap{height:calc(100vh - 54px);display:grid;grid-template-columns:260px 1fr 420px;gap:10px;padding:10px}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;min-height:0}
+  .panel h3{margin:0;padding:10px 12px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .content{padding:10px;overflow:auto}
+  .row{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+  .tab{flex:1;text-align:left;background:var(--panel2);border:1px solid var(--border);padding:8px 10px;border-radius:8px;cursor:pointer;color:var(--text);font-weight:600}
+  .tab.active{outline:2px solid var(--accent)}
+  .viewport{ position:relative; overflow:hidden; min-height:0; }
+  #stage{ position:absolute; inset:0; }
+  canvas{ display:block; }
+  .hint{position:absolute;inset:auto 12px 12px 12px;background:#0b1220cc;border:1px solid var(--border);border-radius:10px;padding:10px;font-size:12px;color:var(--muted);pointer-events:none}
+  .kv{display:grid;grid-template-columns:150px 1fr;gap:8px;align-items:center;margin-bottom:8px}
+  .input{width:100%;background:#0f1420;border:1px solid var(--border);color:var(--text);padding:8px;border-radius:8px}
+  .select{width:100%;background:#0f1420;border:1px solid var(--border);color:var(--text);padding:8px;border-radius:8px}
+  .toolbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+  .toolbtn{background:#0f1626;border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:999px;cursor:pointer;font-weight:700}
+  .toolbtn.active{outline:2px solid var(--accent)}
+  .toolbtn input{margin:0}
+  .toast{position:fixed;bottom:14px;right:14px;background:#0b1220;border:1px solid var(--border);padding:10px 12px;border-radius:10px;display:none;z-index:1200}
+  .muted{color:var(--muted)}
+  .dropmask{ position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    background:#0b1220cc;border:2px dashed var(--accent);border-radius:12px;z-index:5;
+    font-weight:800;letter-spacing:.04em; }
+  .check{display:inline-flex;align-items:center;gap:8px}
+  .sep{width:1px;height:26px;background:var(--border)}
+  .subtle{font-size:12px;color:var(--muted)}
+  .btn-small{padding:6px 8px;font-weight:700;border-radius:8px;border:1px solid var(--border);background:#0f1626;color:var(--text);cursor:pointer}
+  .btn-small:hover{border-color:var(--accent)}
+  .grid2{display:grid;grid-template-columns:40px 1fr auto auto auto;gap:6px;align-items:center}
+  .slotlabel{font-size:12px;color:var(--muted)}
 
-    /* Manual config section */
-    .section{border:1px solid var(--border); border-radius:12px; padding:10px}
-    .section h4{margin:0 0 8px 0; font-size:13px; color:#cbd5e1}
-    .grid{display:grid;grid-template-columns:1fr 1fr; gap:8px}
-    .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr; gap:8px}
-    .small{font-size:12px;color:#a6b4cf}
-    .notice{padding:8px;border:1px dashed var(--border); border-radius:10px; background:#0b1323cc; color:#cbd5e1}
-    code{background:#0b1220;padding:0 4px;border-radius:4px}
-  </style>
+  .panel-name{ padding:10px 12px 6px 12px; }
+  .panel-name .label{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; display:block; margin-bottom:6px; }
+  .panel-name .projname{ display:inline-block; padding:4px 8px; border:1px solid var(--border); background:var(--panel2); border-radius:8px;
+                         font-weight:800; letter-spacing:.02em; color:var(--text); font-size:12px; }
+
+  .menu{ position:relative; }
+  .menubtn{ background:var(--panel2); border:1px solid var(--border); color:var(--text);
+            padding:8px 10px; border-radius:8px; cursor:pointer; font-weight:700; display:inline-flex; align-items:center; gap:6px; }
+  .menubtn:hover{ border-color:var(--accent); }
+  .menu-pop{
+    position:absolute; top:44px; left:0; min-width:220px; background:var(--panel);
+    border:1px solid var(--border); border-radius:12px; padding:6px; display:none; z-index:2000; box-shadow:0 10px 24px rgba(0,0,0,.35);
+  }
+  .menu.open .menu-pop{ display:block; }
+  .menuitem{ display:flex; align-items:center; gap:8px; width:100%; padding:10px 10px; border-radius:8px;
+             background:transparent; border:1px solid transparent; color:var(--text); cursor:pointer; text-align:left; font-weight:700; }
+  .menuitem:hover{ background:var(--panel2); border-color:var(--border); }
+  .menuitem input[type="file"]{ display:none; }
+
+  .section{border:1px solid var(--border);border-radius:10px;background:var(--panel2);margin-bottom:10px;overflow:hidden}
+  .section .header{padding:10px 12px;font-weight:800;letter-spacing:.04em;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;color:var(--text)}
+  .section .body{padding:10px}
+
+  /* scene-row action icons */
+  .iconbtn{ background:#0f1626; border:1px solid var(--border); color:var(--text);
+            padding:4px 8px; border-radius:8px; cursor:pointer; font-weight:700 }
+  .iconbtn:hover{ border-color:var(--accent) }
+  .iconbtn.dim{ opacity:.55 }
+
+
+  /* collapsible snap panel */
+  .snap-panel{ border:1px solid var(--border); border-radius:10px; padding:8px; background:var(--panel2); margin:6px 0; }
+  .snap-panel .kv{ margin-bottom:6px }
+
+
+  /* Hint FAB and transitions */
+  .hint{ transition: opacity .2s ease, transform .2s ease; }
+  .hint.hidden{ opacity:0; transform: translateY(8px); }
+  .hint-fab{
+    position:absolute; left:12px; bottom:12px; z-index:6;
+    width:40px; height:40px; border-radius:999px;
+    background:var(--panel2); border:1px solid var(--border); color:var(--text);
+    display:flex; align-items:center; justify-content:center; font-weight:900;
+    cursor:pointer; box-shadow:0 2px 8px rgba(0,0,0,.35);
+  }
+  .hint-fab:hover{ border-color:var(--accent); }
+
+
+  /* keep hint clear of the left FAB */
+  .hint{ left:60px; right:12px; bottom:12px; }
+
+
+  /* animated expand from the FAB */
+  .hint{
+    transition: opacity .22s ease, transform .28s cubic-bezier(.2,.7,.2,1);
+    transform-origin: left bottom;
+  }
+  .hint.hidden{
+    opacity:0;
+    transform: translateY(8px) scaleX(.85);
+    pointer-events:none;
+  }
+  .hint-fab.open{
+    transform: rotate(180deg);
+    transition: transform .22s ease;
+  }
+
+
+  /* Make FAB visually match the hint bar */
+  .hint-fab{
+    background:#0b1220cc;         /* same translucent bg as .hint */
+    border:1px solid var(--border);/* same outline */
+    color:var(--muted);            /* same text tone as hint */
+    box-shadow:none;               /* align with hint (no shadow) */
+  }
+
+
+  /* multi-select tab highlight */
+  .tab.sel{ outline:2px solid var(--accent); }
+
+
+  .toolbtn.space-active{ outline:2px solid var(--accent); }
+
+  /* Pivot marker */
+  .pivot-note{ font-size:12px; color:var(--muted); }
+
+
+  /* Scene-tree context menu */
+  .ctxmenu{
+    position:absolute; z-index:9999; min-width:180px;
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    box-shadow:0 8px 24px rgba(0,0,0,.4); overflow:hidden; display:none;
+  }
+  .ctxmenu .item{ padding:8px 12px; cursor:pointer; border-bottom:1px solid var(--border); }
+  .ctxmenu .item:last-child{ border-bottom:0; }
+  .ctxmenu .item:hover{ background:var(--panel2); }
+  .ctxmenu .sep{ height:1px; background:var(--border); margin:4px 0; }
+
+
+  /* DnD visuals */
+  #sceneList{ position:relative; }
+  .drop-line{ position:absolute; left:8px; right:8px; height:0; border-top:2px solid var(--accent); pointer-events:none; display:none; }
+  .row.drop-onto{ outline:2px dashed var(--accent); }
+  .row.dragging .tab{ opacity:.6; }
+
+
+
+  .status-pill{ padding:2px 8px; border:1px solid var(--border); border-radius:999px; }
+
+  /* Overlay status badge (viewport corner) */
+  .status-badge{
+    position:absolute; top:12px; right:12px; z-index:7;
+    background:#0b1220cc; border:1px solid var(--border); border-radius:10px;
+    padding:6px 10px; font-size:12px; color:var(--muted);
+    display:flex; gap:8px; align-items:center;
+    pointer-events:none; /* non-blocking overlay */
+  }
+  .status-badge.top-left{ left:12px; right:auto; }
+  .status-pill{ padding:2px 8px; border:1px solid var(--border); border-radius:999px; }
+
+
+  .slotrow{display:grid;grid-template-columns:28px 28px 28px 1fr auto;gap:8px;align-items:center;margin:6px 0;padding:6px;border:1px solid var(--border);border-radius:8px;background:#0f1420;}
+  .thumb{width:28px;height:28px;border:1px solid var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--muted);overflow:hidden;background:#0b1220;}
+  .slotname{font-weight:700;}
+  .slotmeta{font-size:12px;color:var(--muted);}
+  .slotbtn{background:#0f1626;border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:8px;cursor:pointer;font-weight:700}
+  .slotbtn:hover{border-color:var(--accent)}
+
+</style>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/"
+  }
+}
+</script>
 </head>
 <body>
-  <header class="top">
-    <b>Editor + Publish Panel</b>
-    <span class="muted">Einbaufertiger Publish-Block. Alles CSS/JS inline.</span>
-    <span style="flex:1"></span>
-    <a href="#" id="demoSelect" style="color:#a5b4fc;text-decoration:underline">Demo: Auswahl simulieren</a>
-  </header>
-  <main>
-    <div class="notice">
-      <b>Hinweis:</b> Diese Datei enthält <i>nur</i> das Publish-Panel mit optionaler <b>manueller Szenenkonfiguration</b>.<br>
-      In deiner echten Editor-HTML wird normalerweise aus <code>state.objects</code> + <code>state.selectedId</code> gelesen.
-      Fehlt diese API, nutze unten die <b>manuelle Szene</b>.
+  <div class="top">
+    <div class="brand">WebAR Editor — Multi-Object</div>
+
+    <div class="menu" id="projectMenu">
+      <button id="btn-project-menu" class="menubtn" aria-haspopup="true" aria-expanded="false">Projekt ▾</button>
+      <div class="menu-pop" id="projectMenuPop" role="menu">
+        <button id="btn-new" class="menuitem" role="menuitem">+ Neues Projekt</button>
+        <label class="menuitem" role="menuitem">Projekt öffnen
+          <input id="file-project" type="file" accept=".webar,.json">
+        </label>
+        <button id="btn-save-as-menu" class="menuitem" role="menuitem">Speichern unter…</button>
+      </div>
     </div>
-  </main>
 
-  <!-- ======== PUBLISH PANEL ======== -->
-  <button id="pub-toggle" title="Publish (Surface/Image AR)">Publish</button>
-  <aside id="pub-panel" role="dialog" aria-modal="false" aria-label="Publish">
-    <header>
-      <b>Publish – WebAR Link</b>
-      <div style="flex:1"></div>
-      <button id="pub-close" title="Schließen" style="padding:6px 8px;border-radius:8px">✕</button>
-    </header>
-    <div class="body">
-      <label>Viewer URL (HTTPS empfohlen)
-        <input id="pub-viewer-url" type="text" value="./viewer.html" placeholder="./viewer.html">
-      </label>
+    <label class="btn">Objekt import
+      <input id="file-glb" type="file" accept=".glb" multiple style="display:none">
+    </label>
 
-      <div class="section">
-        <h4>Quelle wählen</h4>
-        <div class="row">
-          <button id="pub-surface">Surface‑AR Link</button>
-          <button id="pub-image">Image‑AR Link</button>
+    <div class="sp"></div>
+<span id="btn-undo" style="display:none"></span>
+<span id="btn-redo" style="display:none"></span>
+<div class="sep"></div>
+    <button id="btn-save" class="btn" title="Strg+S">Projekt speichern</button>
+    <button id="btn-del" class="btn">Ausgewähltes löschen</button>
+    <button id="btn-clear" class="btn">Szene leeren</button>
+  </div>
+
+  <div class="wrap">
+    <div class="panel">
+      <div class="panel-name"><span class="label">Projekt</span><span id="projName" class="projname">Unbenanntes Projekt</span></div>
+      <h3>Szenenbaum</h3>
+      <div id="sceneList" class="content"><div id="dropLine" class="drop-line"></div></div>
+    </div>
+
+    <div class="viewport">
+      <div id="stage"></div>
+      <div id="vpStatus" class="status-badge top-right" aria-live="polite"><span id="vp-pill-space" class="status-pill">Space: Local</span><span id="vp-pill-snap"  class="status-pill">Snap: Aus</span><span id="vp-pill-solo"  class="status-pill" style="display:none">Solo</span></div>
+      
+      <div id="dropmask" class="dropmask">Datei hierher ziehen (.glb)</div>
+      <button id="hintFab" class="hint-fab" aria-expanded="false" title="Hinweise">i</button>
+      <div class="hint hidden">LMB drehen · Rad zoomen · RMB/Shift+LMB schwenken · Klick auf Objekt = Auswahl · Klick ins Leere/ESC = Auswahl aufheben · W/E/R Move/Rotate/Scale · Strg+D duplizieren · F Drop-to-Floor · 1–5 Bookmarks · Shift+1–5 Speichern</div>
+    </div>
+
+    <div class="panel">
+      <h3>Eigenschaften</h3>
+      <div class="content">
+        <div class="row toolbar">
+     <button id="tool-move" class="toolbtn">Verschieben (W)</button>
+     <button id="tool-rotate" class="toolbtn">Drehen (E)</button>
+     <button id="tool-scale" class="toolbtn">Skalieren (R)</button>
+     
+    </div>
+        <div class="row toolbar">
+          <label class="toolbtn check"><input id="snapChk" type="checkbox"> Snap aktiv</label>
+          <button id="btn-duplicate" class="toolbtn" title="Strg+D">Duplizieren</button>
+          <button id="btn-floor" class="toolbtn" title="F">Drop to Floor</button>
         </div>
-        <div class="row">
-          <input id="pub-image-file" type="file" accept="image/*">
-          <label>Bildbreite (m)
-            <input id="pub-image-width" type="number" step="0.01" min="0.05" value="0.20">
+        <div class="row toolbar" id="spaceRow">
+          <span class="muted" style="padding:4px 0">Space:</span>
+          <button id="space-local" class="toolbtn" data-space="local">Lokal</button>
+          <button id="space-world" class="toolbtn" data-space="world">Welt</button>
+        </div>
+        <div class="row toolbar">
+          <button id="btn-pivot-center" class="toolbtn" title="Pivot auf BBox-Mitte setzen">Pivot = BBox‑Mitte</button>
+        </div>
+
+
+
+        <div id="snapPanel" class="snap-panel" style="display:none">
+<div class="kv"><div class="subtle">Translate Snap (m)</div>
+          <select id="transSnapSel" class="select">
+            <option value="">Off</option>
+            <option value="0.1" selected>0.1</option>
+            <option value="0.25">0.25</option>
+            <option value="0.5">0.5</option>
+            <option value="1">1.0</option>
+          </select>
+        </div>
+        <div class="kv"><div class="subtle">Rotate Snap (°)</div>
+          <select id="rotSnapSel" class="select">
+            <option value="">Off</option>
+            <option value="15" selected>15°</option>
+            <option value="30">30°</option>
+            <option value="45">45°</option>
+            <option value="90">90°</option>
+          </select>
+        </div>
+        <div class="kv"><div class="subtle">Scale Snap</div>
+          <select id="scaleSnapSel" class="select">
+            <option value="">Off</option>
+            <option value="0.1" selected>0.1</option>
+            <option value="0.25">0.25</option>
+            <option value="0.5">0.5</option>
+          </select>
+        </div>
+        
+        </div>
+
+        <div class="row toolbar">
+          <button id="btn-group" class="toolbtn" title="Gruppe bilden">Gruppe bilden</button>
+          <button id="btn-ungroup" class="toolbtn" title="Gruppe auflösen">Gruppe auflösen</button>
+        </div>
+
+
+
+        <div id="camSection" class="section">
+          <div class="header">📷 Kamera</div>
+          <div class="body">
+            <div class="row">
+              <button class="btn-small" id="btn-view-iso">Iso</button>
+              <button class="btn-small" id="btn-view-front">Front</button>
+              <button class="btn-small" id="btn-view-side">Seite</button>
+              <button class="btn-small" id="btn-view-top">Top</button>
+            </div>
+            <div class="row">
+              <button class="btn-small" id="btn-snap">Screenshot</button>
+              <button class="btn-small" id="btn-resetcam">Kamera zurücksetzen</button>
+              <button class="btn-small" id="btn-frame-sel" title="Shift+F">Fokus Auswahl</button>
+              <button class="btn-small" id="btn-frame-all" title="A">Fokus Szene</button>
+            </div>
+            <details id="bmFold" class="fold">
+              <summary>Bookmarks</summary>
+              <div class="fold-body">
+                <div class="row subtle">Shortcuts: 1–5 Aufrufen · Shift+1–5 Speichern</div>
+                <div id="bmList"></div>
+              </div>
+            </details>
+          </div>
+        </div>
+
+        <div class="kv"><div>Raumgröße</div><input id="roomSize" class="input" type="number" step="1" value="24"></div>
+<div class="kv"><div>Grid immer sichtbar</div><label class="check"><input id="gridOnTop" type="checkbox"> Aktiv</label></div>
+        <div class="kv"><div>Auto-Fit Größe</div><input id="fitSize" class="input" type="number" step="0.1" value="1.5"></div>
+        <hr style="border:0;border-top:1px solid var(--border);margin:10px 0">
+        <div class="kv"><div>Name</div><input id="prop-name" class="input"></div>
+        <div class="kv"><div>Pos X</div><input id="posx" class="input" type="number" step="0.01"></div>
+        <div class="kv"><div>Pos Y</div><input id="posy" class="input" type="number" step="0.01"></div>
+        <div class="kv"><div>Pos Z</div><input id="posz" class="input" type="number" step="0.01"></div>
+        <div class="kv"><div>Rot X°</div><input id="rotx" class="input" type="number" step="1"></div>
+        <div class="kv"><div>Rot Y°</div><input id="roty" class="input" type="number" step="1"></div>
+        <div class="kv"><div>Rot Z°</div><input id="rotz" class="input" type="number" step="1"></div>
+        <div class="kv"><div>Scale</div><input id="scale" class="input" type="number" step="0.01"></div>
+        <button id="btn-apply" class="btn" style="margin-top:8px">Übernehmen</button>
+      
+        <hr style="border:0;border-top:1px solid var(--border);margin:12px 0">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <div class="muted" style="font-weight:700">Material</div>
+          <label class="toolbtn" style="display:inline-flex;align-items:center;gap:6px">
+            <input id="mat-override" type="checkbox"> Override aktiv
           </label>
         </div>
-      </div>
-
-      <div class="section">
-        <h4>Manuelle Szene (Fallback, wenn keine Editor-Auswahl)</h4>
-        <label>GLB/GLTF URL (oder Data URL)
-          <input id="m-src" type="text" placeholder="https://.../model.glb">
-        </label>
-        <div class="grid-3">
-          <label>Scale<input id="m-scale" type="number" step="0.01" value="1"></label>
-          <label>Anim Index<input id="m-anim" type="number" step="1" value="0"></label>
-          <label>Audio URL<input id="m-audio" type="text" placeholder="optional"></label>
+        <div class="kv"><div>Farbe</div><input id="mat-color" class="input" type="color" value="#ffffff" style="padding:0 4px;height:34px"></div>
+        <div class="kv"><div>Roughness</div><input id="mat-rough" class="input" type="number" step="0.01" min="0" max="1" value="0.5"></div>
+        <div class="kv"><div>Metalness</div><input id="mat-metal" class="input" type="number" step="0.01" min="0" max="1" value="0.0"></div>
+        <div class="kv"><div>BaseColor Map</div><input id="mat-map" class="input" type="file" accept="image/*"></div>
+        <div class="kv"><div>Normal Map</div><input id="mat-normal" class="input" type="file" accept="image/*"></div>
+        <div class="row toolbar">
+          <button id="btn-mat-apply" class="toolbtn">Auf Auswahl anwenden</button>
+          <button id="btn-mat-reset" class="toolbtn">Reset</button>
         </div>
-        <div class="grid-3">
-          <label>Rot X°<input id="m-rx" type="number" step="1" value="0"></label>
-          <label>Rot Y°<input id="m-ry" type="number" step="1" value="0"></label>
-          <label>Rot Z°<input id="m-rz" type="number" step="1" value="0"></label>
+        <div class="row" style="margin-top:8px">
+          <div class="subtle">Material‑Slots</div>
         </div>
-        <div class="grid-3">
-          <label>Pos X<input id="m-px" type="number" step="0.01" value="0"></label>
-          <label>Pos Y<input id="m-py" type="number" step="0.01" value="0"></label>
-          <label>Pos Z<input id="m-pz" type="number" step="0.01" value="0"></label>
-        </div>
-        <label class="small"><input id="m-enable" type="checkbox"> Manuelle Szene aktivieren (wenn kein Editor-Objekt gewählt ist)</label>
-      </div>
-
-      <label>Link
-        <input id="pub-link" type="text" readonly placeholder="Hier erscheint der Link…">
-      </label>
-      <canvas id="pub-qr" width="0" height="0"></canvas>
-      <div class="small">Scanne den QR-Code oder kopiere den Link. Für AR ist HTTPS erforderlich.</div>
+        <div id="mat-slots"></div>
+    
+</div>
     </div>
-  </aside>
+  </div>
 
-  <script>
-    // --- optional: kleine Demo-Auswahl ---
-    document.getElementById('demoSelect').addEventListener('click', (e)=>{
-      e.preventDefault();
-      // Minimaler Demo-Editor-State
-      window.state = {
-        selectedId: 'demo1',
-        objects: [{
-          id: 'demo1',
-          url: 'https://threejs.org/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf',
-          group: { // Fake Transform (nur für snapshot in diesem Demo-File)
-            position: {x:0,y:0,z:0},
-            rotation: {x:0,y:0,z:0},
-            scale: {x:1,y:1,z:1}
-          },
-          animIndex: 0,
-          audioURL: ''
-        }]
-      };
-      alert('Demo-Auswahl gesetzt. Öffne das Publish-Panel.');
-    });
-  </script>
+  <div class="modal-mask" id="newProjMask" role="dialog" aria-modal="true" aria-labelledby="newProjTitle" style="position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:2100;">
+    <div class="modal" style="background:var(--panel);border:1px solid var(--border);border-radius:14px;width:min(420px, 90vw);padding:14px;box-shadow:0 10px 30px rgba(0,0,0,.45);">
+      <h4 id="newProjTitle" style="margin:0 0 8px 0;font-size:16px;">Neues Projekt</h4>
+      <div class="row"><label class="kv" style="margin:0"><div>Projektname</div><input id="newProjName" class="input" placeholder="z. B. Messe-AR-Setup"></label></div>
+      <div class="actions" style="display:flex;gap:8px;justify-content:flex-end;">
+        <button id="newProjCancel" class="btn" style="background:transparent;">Abbrechen</button>
+        <button id="newProjOk" class="btn">OK</button>
+      </div>
+    </div>
+  </div>
 
-  <script>
-  (function(){
-    const $ = (s)=> document.querySelector(s);
-    const on = (el, ev, fn)=> el && el.addEventListener(ev, fn);
+  
+  <div id="ctxMenu" class="ctxmenu">
+    <div class="item" data-act="rename">Umbenennen…</div>
+    <div class="item" data-act="toggleVis">Sichtbarkeit umschalten</div>
+    <div class="item" data-act="toggleLock">Sperren umschalten</div>
+    <div class="sep"></div>
+    <div class="item" data-act="duplicate">Duplizieren</div>
+    <div class="item" data-act="delete">Löschen</div>
+    <div class="sep"></div>
+    <div class="item" data-act="isolate">Isolieren (Solo)</div>
+    <div class="item" data-act="unisolate" style="display:none">Isolation beenden</div>
+    <div class="sep"></div>
+    <div class="item" data-act="unparentAll">Aus Gruppe lösen (Kinder → Top)</div>
+  </div>
+<div class="toast" id="toast"></div>
 
-    // Optional QR lib von CDN (klein & robust)
-    const QR_URL = "https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js";
-    function ensureQRLib(){
-      return new Promise((resolve)=>{
-        if (window.QRCode) return resolve();
-        const s = document.createElement('script');
-        s.src = QR_URL; s.async = true;
-        s.onload = ()=> resolve();
-        s.onerror = ()=> resolve();
-        document.head.appendChild(s);
-      });
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls }     from 'three/addons/controls/OrbitControls.js';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
+import { GLTFLoader }        from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader }       from 'three/addons/loaders/DRACOLoader.js';
+import * as SkeletonUtils    from 'three/addons/utils/SkeletonUtils.js';
+
+const $  = q => document.querySelector(q);
+const $$ = q => Array.from(document.querySelectorAll(q));
+const toastEl = $('#toast');
+function toast(m){ toastEl.textContent=m; toastEl.style.display='block'; setTimeout(()=>toastEl.style.display='none',1800); }
+const uid = ()=> 'o_'+Math.random().toString(36).slice(2,9);
+
+// ---- Projektname & Dirty-Tracking ----
+let projectName = 'Unbenanntes Projekt';
+let isDirty = false;
+let fileHandle = null;
+function setProjectName(name){
+  projectName = (name||'').trim() || 'Unbenanntes Projekt';
+  $('#projName').textContent = projectName + (isDirty ? ' *' : '');
+  document.title = 'WebAR Editor V2.1.7 — ' + projectName + (isDirty ? ' *' : '');
+}
+function setDirty(flag=true){
+  isDirty = !!flag;
+  $('#projName').textContent = projectName + (isDirty ? ' *' : '');
+  document.title = 'WebAR Editor V2.1.7 — ' + projectName + (isDirty ? ' *' : '');
+}
+window.addEventListener('beforeunload', (e)=>{ if(isDirty){ e.preventDefault(); e.returnValue=''; } });
+
+// ---- Neues Projekt Modal ----
+const newProjMask  = $('#newProjMask');
+const newProjInput = $('#newProjName');
+$('#newProjOk').addEventListener('click', ()=>{ const name = newProjInput.value.trim(); if(!name){ newProjInput.focus(); return; } newProjMask.style.display='none'; doNewProject(name); });
+$('#newProjCancel').addEventListener('click', ()=> newProjMask.style.display='none');
+newProjMask.addEventListener('click', (e)=>{ if(e.target===newProjMask) newProjMask.style.display='none'; });
+function openNewProjectDialog(){ newProjInput.value=''; newProjMask.style.display='flex'; setTimeout(()=>newProjInput.focus(),0); }
+
+// ---- Project Dropdown ----
+(function(){
+  const menu = document.getElementById('projectMenu');
+  const btn  = document.getElementById('btn-project-menu');
+  function closeMenu(){ menu.classList.remove('open'); btn.setAttribute('aria-expanded','false'); }
+  function openMenu(){ menu.classList.add('open'); btn.setAttribute('aria-expanded','true'); }
+  btn.addEventListener('click', (e)=>{ e.stopPropagation(); menu.classList.toggle('open'); btn.setAttribute('aria-expanded', menu.classList.contains('open') ? 'true' : 'false'); });
+  document.addEventListener('click', (e)=>{ if(!menu.contains(e.target)) closeMenu(); });
+  window.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') closeMenu(); });
+  document.getElementById('btn-new').addEventListener('click', ()=>{ if(!isDirty || confirm('Es gibt ungespeicherte Änderungen. Trotzdem neues Projekt anlegen?')){ openNewProjectDialog(); closeMenu(); } });
+  document.getElementById('file-project').addEventListener('change', ()=> closeMenu());
+  document.getElementById('btn-save-as-menu').addEventListener('click', ()=>{ saveProject({saveAs:true}); closeMenu(); });
+})();
+
+// --- Three.js Setup ---
+const stage = $('#stage');
+const renderer = new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#0b1323');
+const camera = new THREE.PerspectiveCamera(30,1,0.01,1000); camera.position.set(15,6,15);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.enablePan     = true;
+controls.minDistance   = 0.2;
+controls.maxDistance   = 400;
+controls.target.set(1,0,0); controls.update();
+
+const hemi = new THREE.HemisphereLight(0xffffff, 0x334466, 0.7); scene.add(hemi);
+const dir  = new THREE.DirectionalLight(0xffffff, 1.0); dir.position.set(2,4,2); scene.add(dir);
+
+function setDefaultView(){ camera.position.set(15, 6, 15); controls.target.set(1,0,0); controls.update(); }
+
+// Transform gizmo
+const tcontrols = new TransformControls(camera, renderer.domElement);
+tcontrols.addEventListener('dragging-changed', e => { controls.enabled = !e.value; });
+scene.add(tcontrols);
+tcontrols.setMode('translate');
+tcontrols.setSize(1.0);
+tcontrols.addEventListener('objectChange', () => {
+  const rec = state.objects.find(x => x.id === state.selectedId);
+  
+// Safety net: finalize transform at mouse up
+tcontrols.addEventListener('mouseUp', ()=>{ finalizePendingTransform(); });
+if (!rec || tcontrols.object !== rec.group) return;
+  const g = rec.group;
+  if (tcontrols.getMode() === 'scale') {
+    const u = (g.scale.x + g.scale.y + g.scale.z) / 3; g.scale.setScalar(u);
+  }
+  const p = g.position, r = g.rotation;
+  $('#posx').value = p.x.toFixed(3); $('#posy').value = p.y.toFixed(3); $('#posz').value = p.z.toFixed(3);
+  $('#rotx').value = THREE.MathUtils.radToDeg(r.x).toFixed(1); $('#roty').value = THREE.MathUtils.radToDeg(r.y).toFixed(1); $('#rotz').value = THREE.MathUtils.radToDeg(r.z).toFixed(1);
+  $('#scale').value = g.scale.x.toFixed(3);
+  rec.bbox.box.setFromObject(g); rec.bbox.updateMatrixWorld(true);
+});
+
+// ------- GRID SYSTEM --------
+let gridLocal, gridFar, axisXLine, axisZLine;
+function disposeObj(o){ if(!o) return; o.geometry?.dispose?.(); if(o.material){ if(Array.isArray(o.material)) o.material.forEach(m=>m.dispose?.()); else o.material.dispose?.(); } }
+
+// === WebAR Editor init hooks (added) ===
+(() => { const el = document.getElementById('gridOnTop'); if (el && !el.__bound) { el.addEventListener('change', updateGridOnTop); el.__bound=true; } })();
+function buildRoom(size=24){
+  [gridLocal, gridFar, axisXLine, axisZLine].forEach(o=>{ if(o){ scene.remove(o); disposeObj(o); } });
+  gridLocal = gridFar = axisXLine = axisZLine = null;
+
+  const L = Math.max(2, size);
+  const div = Math.max(10, Math.round(L));
+
+  // Near grid (slightly above ground to avoid z-fighting)
+  gridLocal = new THREE.GridHelper(L, div, 0x6ea0ff, 0x6ea0ff);
+  gridLocal.material.transparent = true;
+  gridLocal.material.opacity = 0.60;
+  gridLocal.material.depthTest = true;
+  gridLocal.material.depthWrite = false;
+  gridLocal.position.y = 0.001;
+  gridLocal.raycast = ()=>{};
+  scene.add(gridLocal);
+
+  // Far grid (slightly below)
+  const BIG = 2000;
+  gridFar = new THREE.GridHelper(BIG, BIG, 0x263b5d, 0x263b5d);
+  gridFar.material.transparent = true;
+  gridFar.material.opacity = 0.22;
+  gridFar.material.depthTest = true;
+  gridFar.material.depthWrite = false;
+  gridFar.position.y = -0.001;
+  gridFar.raycast = ()=>{};
+  scene.add(gridFar);
+
+  // Axis lines higher
+  const y = 0.002;
+  const mat = new THREE.LineBasicMaterial({ color: 0x60a5fa, transparent:true, opacity:1.0 });
+  {
+    const g = new THREE.BufferGeometry().setFromPoints([ new THREE.Vector3(-L/2, y, 0), new THREE.Vector3(L/2, y, 0) ]);
+    axisXLine = new THREE.Line(g, mat.clone()); axisXLine.raycast = ()=>{}; scene.add(axisXLine);
+  }
+
+// Toggle grid on-top rendering without rebuilding geometry
+function updateGridOnTop(){
+  const on = document.getElementById('gridOnTop')?.checked;
+  if(typeof on === 'undefined') return;
+  const objs = [gridLocal, axisXLine, axisZLine];
+  objs.forEach(o=>{
+    if(!o) return;
+    if(o.material){
+      if(Array.isArray(o.material)) o.material.forEach(m=>{ if(m) m.depthTest = !on; });
+      else o.material.depthTest = !on;
     }
-    async function drawQR(text){
-      await ensureQRLib();
-      const cnv = $("#pub-qr");
-      if(!window.QRCode || !cnv){ cnv.hidden=true; return; }
-      try{
-        const opts = { errorCorrectionLevel:'L', width: 280, margin:1, color:{ dark:"#000000", light:"#ffffff" } };
-        const dataUrl = await window.QRCode.toDataURL(text, opts);
-        const img = new Image();
-        img.onload = ()=>{
-          cnv.width = img.width; cnv.height = img.height;
-          const ctx = cnv.getContext('2d');
-          ctx.clearRect(0,0,cnv.width,cnv.height);
-          ctx.drawImage(img, 0, 0);
-          cnv.hidden = false;
-        };
-        img.src = dataUrl;
-      }catch(e){ cnv.hidden=true; }
+    o.renderOrder = on ? 999 : 0;
+  });
+  if(gridLocal && gridLocal.material){
+    const m = gridLocal.material;
+    const setOpacity = (mat, val)=>{ if(Array.isArray(mat)) mat.forEach(mm=>{ if(mm) mm.opacity = val; }); else m.opacity = val; };
+    setOpacity(m, on ? 0.85 : 0.60);
+  }
+}
+  {
+    const g = new THREE.BufferGeometry().setFromPoints([ new THREE.Vector3(0, y, -L/2), new THREE.Vector3(0, y, L/2) ]);
+    axisZLine = new THREE.Line(g, mat.clone()); axisZLine.raycast = ()=>{}; scene.add(axisZLine);
+  }
+}
+
+// (Global) Toggle grid on-top rendering (ensures availability at startup)
+function updateGridOnTop(){
+  const el = document.getElementById('gridOnTop');
+  const on = !!(el && el.checked);
+  const setDepth = (mat, val)=>{ if(!mat) return; if(Array.isArray(mat)) mat.forEach(m=>{ if(m) m.depthTest = val; }); else mat.depthTest = val; };
+  const setOpacity = (mat, val)=>{ if(!mat) return; if(Array.isArray(mat)) mat.forEach(m=>{ if(m) m.opacity = val; }); else mat.opacity = val; };
+  [gridLocal, axisXLine, axisZLine].forEach(o=>{ if(!o) return; if(o.material) setDepth(o.material, !on); o.renderOrder = on ? 999 : 0; });
+  if(gridLocal) setOpacity(gridLocal.material, on ? 0.85 : 0.60);
+}
+
+
+// Resize
+function onResize(){
+  const r = stage.getBoundingClientRect();
+  const w = Math.max(1, r.width), h = Math.max(1, r.height);
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+new ResizeObserver(onResize).observe(stage); onResize();
+
+// Auswahl / Deselekt
+const raycaster = new THREE.Raycaster(); const mouse = new THREE.Vector2();
+function clearSelection(){ state.selectedId = null; state.selection.clear(); tcontrols.detach(); state.objects.forEach(o=>{ if(o.bbox) o.bbox.visible=false; }); rebuildList(); }
+renderer.domElement.addEventListener('pointerdown', (e)=>{
+  if (tcontrols && tcontrols.dragging) return;
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((e.clientY - rect.top)  / rect.height) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const targets = state.objects.filter(o=>!o.hidden && !o.locked).map(o=>o.group);
+  const hits = raycaster.intersectObjects(targets, true);
+  if(hits.length){
+    let obj3 = hits[0].object;
+    while (obj3 && obj3.parent && obj3.parent !== scene) obj3 = obj3.parent;
+    const rec = state.objects.find(o => o.group === obj3);
+    if (rec) { if(e.shiftKey||e.ctrlKey||e.metaKey) selectObject(rec.id,{toggle:true}); else selectObject(rec.id); try{ updateSelectionBoxes(); }catch(e){} }
+  } else {
+    clearSelection();
+  }
+});
+
+// Drag & Drop Import (.glb)
+const dropmask = $('#dropmask');
+['dragenter','dragover'].forEach(evt=>{ stage.addEventListener(evt, (e)=>{ e.preventDefault(); dropmask.style.display='flex'; }); });
+['dragleave','drop'].forEach(evt=>{ stage.addEventListener(evt, (e)=>{ e.preventDefault(); dropmask.style.display='none'; }); });
+stage.addEventListener('drop', (e)=>{ const files = [...e.dataTransfer.files].filter(f=>/\.glb$/i.test(f.name)); if(!files.length){ toast('Nur .glb Dateien werden unterstützt'); return; } files.forEach(addGLB); });
+
+// Loader
+const gltfLoader = new GLTFLoader();
+const draco = new DRACOLoader(); draco.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/'); gltfLoader.setDRACOLoader(draco);
+
+// State & History
+const state = { objects: [], selectedId: null, selection: new Set() };
+const history = []; const future = []; const HISTORY_LIMIT = 100; let draggingStart = null;
+// Ensure a pending gizmo drag becomes a history entry before undo/redo
+function finalizePendingTransform(){
+  try{
+    const sid = state.selectedId;
+    if(!sid) { draggingStart = null; isDragging=false; return; }
+    const rec = state.objects.find(o=>o.id===sid);
+    if(!rec || !rec.group) { draggingStart = null; isDragging=false; return; }
+    if(!draggingStart) { isDragging=false; return; }
+    const end = snapshotTransform(rec.group);
+    const a = JSON.stringify(draggingStart);
+    const b = JSON.stringify(end);
+    if(a !== b){
+      pushHistory({ type:'edit', id:rec.id, payload:{ before:draggingStart, after:end } });
+      autosaveSchedule && autosaveSchedule();
     }
+  }catch(e){ /* no-op */ }
+  finally{
+    draggingStart = null;
+    isDragging = false;
+  }
+}
+ let isDragging=false;
+function canUndo(){ return history.length>0; } function canRedo(){ return future.length>0; }
+function pushHistory(entry){ history.push(entry); if(history.length>HISTORY_LIMIT) history.shift(); future.length=0; updateUndoRedoButtons(); setDirty(true); }
+function updateUndoRedoButtons(){ $('#btn-undo').disabled=!canUndo(); $('#btn-redo').disabled=!canRedo(); }
+function snapshotTransform(g){ return { position:[g.position.x,g.position.y,g.position.z], rotationDeg:[THREE.MathUtils.radToDeg(g.rotation.x),THREE.MathUtils.radToDeg(g.rotation.y),THREE.MathUtils.radToDeg(g.rotation.z)], scale:g.scale.x }; }
+function applyTransform(g, t){ g.position.set(t.position[0], t.position[1], t.position[2]); g.rotation.set(THREE.MathUtils.degToRad(t.rotationDeg[0]),THREE.MathUtils.degToRad(t.rotationDeg[1]),THREE.MathUtils.degToRad(t.rotationDeg[2])); g.scale.setScalar(t.scale); }
 
-    function encodeHash(obj){
-      const json = JSON.stringify(obj);
-      return '#' + btoa(unescape(encodeURIComponent(json)));
+async function fileToBase64(file){ return new Promise((resolve, reject)=>{ const fr=new FileReader(); fr.onload=()=>{ const res = (fr.result||'').toString(); const base64 = res.split(',')[1]||''; resolve({ base64, mime: (res.split(';')[0]||'').replace('data:','') || file.type || 'application/octet-stream' }); }; fr.onerror=reject; fr.readAsDataURL(file); }); }
+function base64ToBlobUrl(b64, mime='application/octet-stream'){ const arrbuf = Uint8Array.from(atob(b64), c=>c.charCodeAt(0)).buffer; const blob = new Blob([arrbuf], {type: mime}); return URL.createObjectURL(blob); }
+
+// Szenenbaum
+function rebuildList(){
+  const root = $('#sceneList'); root.innerHTML='';
+  if(!state.objects.length){ root.innerHTML='<div class="muted">Noch keine Objekte</div>'; return; }
+  state.objects.forEach(o=>{
+    const row = document.createElement('div'); row.className='row';
+    const tab = document.createElement('button'); tab.type='button'; tab.className='tab'+(o.id===state.selectedId?' active':''); tab.textContent=o.name;
+    tab.addEventListener('click', (ev)=>{ if(ev.shiftKey||ev.ctrlKey||ev.metaKey){ selectObject(o.id,{toggle:true}); } else { selectObject(o.id); } });
+    const del = document.createElement('button'); del.type='button'; del.className='btn'; del.textContent='✕';
+    del.addEventListener('click', ()=> deleteObjectWithHistory(o.id));
+    row.appendChild(tab); row.appendChild(del); root.appendChild(row);
+  });
+}
+
+function selectObject(id, opts={}){
+  if(opts.toggle){ if(state.selection.has(id)){ state.selection.delete(id); if(state.selectedId===id) state.selectedId = (state.selection.values().next().value||null); } else { state.selection.add(id); state.selectedId = id; } } else { state.selection.clear(); state.selection.add(id); state.selectedId = id; }
+  state.objects.forEach(o=>{ if(o.bbox){ o.bbox.visible = state.selection.has(o.id) && state.selection.size===1 && (o.id===state.selectedId); } });
+  const o = state.objects.find(x=>x.id===id);
+  if(!o || state.selection.size>1){ tcontrols.detach(); rebuildList();
+    if(o){ $('#prop-name').value=''; ['posx','posy','posz','rotx','roty','rotz','scale'].forEach(id=>$('#'+id).value=''); }
+    return; }
+  $('#prop-name').value = o.name;
+  const p=o.group.position, r=o.group.rotation, s=o.group.scale.x;
+  $('#posx').value=p.x.toFixed(3); $('#posy').value=p.y.toFixed(3); $('#posz').value=p.z.toFixed(3);
+  $('#rotx').value=THREE.MathUtils.radToDeg(r.x).toFixed(1); $('#roty').value=THREE.MathUtils.radToDeg(r.y).toFixed(1); $('#rotz').value=THREE.MathUtils.radToDeg(r.z).toFixed(1);
+  $('#scale').value=s.toFixed(3);
+  tcontrols.attach(o.group);
+  updateToolButtons();
+  rebuildList();
+}
+
+async function deleteObjectWithHistory(id){
+  const i = state.objects.findIndex(x=>x.id===id); if(i<0) return;
+  const o = state.objects[i];
+  let asset = null;
+  if(o.file){ const {base64,mime} = await fileToBase64(o.file); asset = { filename:o.file.name, base64, mime }; }
+  const transform = snapshotTransform(o.group);
+  const name = o.name;
+  const entry = { type:'delete', id, payload:{ name, transform, asset } };
+  doDelete(id);
+  pushHistory(entry); autosaveSchedule();
+}
+function doDelete( id ){
+  const o = state.objects.find(x=>x.id===id); if(!o) return null;
+  // Detach gizmo BEFORE we remove from the scene graph
+  if(tcontrols && tcontrols.object === o.group) tcontrols.detach();
+  if(o.group) scene.remove(o.group);
+  if(o.bbox)  scene.remove(o.bbox);
+  if(o.url)   URL.revokeObjectURL(o.url);
+  const idx = state.objects.indexOf(o);
+  if(idx>=0) state.objects.splice(idx,1);
+  if(state.selectedId===id) state.selectedId=null;
+  rebuildList();
+  return o; // return removed record so callers can use it in history
+}
+
+
+async function createGroupedFromURL(url, name){
+  const gltf = await gltfLoader.loadAsync(url);
+  const root = gltf.scene || gltf.scenes?.[0];
+  if (!root) throw new Error('GLB ohne Szene');
+  const group = new THREE.Group();
+  group.name = name || 'Objekt';
+  group.add(root);
+  scene.add(group);
+  const worldBox = new THREE.Box3().setFromObject(group);
+  const worldCenter = new THREE.Vector3(); worldBox.getCenter(worldCenter);
+  group.children.forEach(c => { c.position.sub(worldCenter); });
+  group.position.add(worldCenter);
+  return {group, root};
+}
+
+async function addGLB(file){
+  const id = uid(); const url = URL.createObjectURL(file);
+  try{
+    const {group} = await createGroupedFromURL(url, (file.name||'Objekt').replace(/\.(glb|gltf)$/i,''));
+    const fit = parseFloat($('#fitSize').value) || 1.5;
+    const box2 = new THREE.Box3().setFromObject(group);
+    const size2 = new THREE.Vector3(); box2.getSize(size2);
+    const maxDim = Math.max(size2.x,size2.y,size2.z) || 1;
+    const uniS   = fit / maxDim;
+    group.scale.setScalar(uniS);
+
+    const bbox  = new THREE.Box3().setFromObject(group);
+    const helper = new THREE.Box3Helper(bbox, 0x60a5fa); helper.visible = false; helper.raycast = ()=>{}; scene.add(helper);
+
+    const rec = { id, name: group.name, file, url, group, bbox: helper, hidden:false, locked:false };
+      if(typeof obj!=='undefined' && obj && obj.material){ rec.material = obj.material; try{ const props={color:obj.material.color, roughness:obj.material.roughness, metalness:obj.material.metalness}; const maps={ colorMap: obj.material.mapBase64||null, normalMap: obj.material.normalBase64||null }; if(obj.material.override){ applyMaterialOverrideToGroup(group, props, maps); } }catch(e){} }
+    state.objects.push(rec);
+    selectObject(id); rebuildList();
+    toast('Importiert: '+group.name);
+
+    const {base64,mime} = await fileToBase64(file);
+    pushHistory({ type:'add', id, payload:{ name: group.name, transform: snapshotTransform(group), asset:{ filename:file.name, base64, mime } } });
+    autosaveSchedule();
+  }catch(err){
+    console.error(err); toast('Fehler beim Import: '+file.name);
+    URL.revokeObjectURL(url);
+  }
+}
+
+function uniqueName(base){ let name=base, i=2; while(state.objects.some(o=>o.name===name)){ name = `${base} (${i++})`; } return name; }
+function uniqueRename(id,name){ let n=name, i=2; while(state.objects.some(o=>o.id!==id && o.name===n)){ n = `${name} (${i++})`; } return n; }
+
+$('#btn-apply').addEventListener('click', ()=>{
+  const o = state.objects.find(x=>x.id===state.selectedId); if(!o) return;
+  const before = { name: o.name, transform: snapshotTransform(o.group) };
+
+  const nameIn = $('#prop-name').value.trim()||o.name;
+  o.name = uniqueRename(o.id, nameIn); o.group.name=o.name;
+  const px=+$('#posx').value||0, py=+$('#posy').value||0, pz=+$('#posz').value||0;
+  const rx=THREE.MathUtils.degToRad(+$('#rotx').value)||0, ry=THREE.MathUtils.degToRad(+$('#roty').value)||0, rz=THREE.MathUtils.degToRad(+$('#rotz').value)||0;
+  const s = +$('#scale').value||1;
+  o.group.position.set(px,py,pz); o.group.rotation.set(rx,ry,rz); o.group.scale.setScalar(s);
+  const bbox = new THREE.Box3().setFromObject(o.group); o.bbox.box.copy(bbox); o.bbox.updateMatrixWorld(true);
+  if(tcontrols.object!==o.group) tcontrols.attach(o.group);
+  rebuildList(); toast('Eigenschaften übernommen');
+
+  const after = { name: o.name, transform: snapshotTransform(o.group) };
+  pushHistory({ type:'edit', id:o.id, payload:{ before, after } });
+  autosaveSchedule();
+});
+
+tcontrols.addEventListener('dragging-changed', e=>{
+  const rec = state.objects.find(x => x.id === state.selectedId);
+  if(!rec || tcontrols.object !== rec.group) return;
+  if(e.value){ draggingStart = snapshotTransform(rec.group); }
+  else{
+    const end = snapshotTransform(rec.group);
+    if(JSON.stringify(draggingStart)!==JSON.stringify(end)){
+      pushHistory({ type:'edit', id:rec.id, payload:{ before:draggingStart, after:end } });
+      autosaveSchedule();
     }
+    draggingStart = null;
+  }
+});
 
-    // Fallback-Utils
-    window.fileToBase64 = window.fileToBase64 || (file => new Promise((res,rej)=>{
-      const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file);
-    }));
-    window.snapshotTransform = window.snapshotTransform || (group => ({
-      position:[group.position.x, group.position.y, group.position.z],
-      rotationDeg:[group.rotation.x*180/Math.PI, group.rotation.y*180/Math.PI, group.rotation.z*180/Math.PI],
-      scale: group.scale.x
-    }));
+// Gizmo + Snap
+function updateToolButtons(){ ['tool-move','tool-rotate','tool-scale'].forEach(id=>$('#'+id)?.classList.remove('active')); const map = {translate:'tool-move', rotate:'tool-rotate', scale:'tool-scale'}; const el = $('#'+map[tcontrols.getMode()]); if(el) el.classList.add('active'); }
+$('#tool-move').addEventListener('click', ()=>{ tcontrols.setMode('translate'); updateToolButtons(); });
+$('#tool-rotate').addEventListener('click', ()=>{ tcontrols.setMode('rotate');   updateToolButtons(); });
+$('#tool-scale').addEventListener('click', ()=>{ tcontrols.setMode('scale');    updateToolButtons(); });
 
-    // Build Payload aus Editor-Auswahl ODER manueller Szene
-    async function buildScenePayload(){
-      // 1) Zuerst Editor prüfen
-      if(window.state && Array.isArray(state.objects)){
-        const sid = state.selectedId;
-        const rec = state.objects.find(o=>o.id===sid);
-        if(sid && rec && rec.group){
-          let src = rec.url || rec.src || null;
-          if(!src && rec.file && typeof fileToBase64==='function'){
-            src = await fileToBase64(rec.file);
+function getSnapValuesFromUI(){
+  const on = $('#snapChk').checked;
+  const ts = $('#transSnapSel').value, rs = $('#rotSnapSel').value, ss = $('#scaleSnapSel').value;
+  return { t: on && ts ? parseFloat(ts) : null, r: on && rs ? THREE.MathUtils.degToRad(parseFloat(rs)) : null, s: on && ss ? parseFloat(ss) : null };
+}
+function updateSnapFromUI(){ const v = getSnapValuesFromUI(); tcontrols.setTranslationSnap(v.t); tcontrols.setRotationSnap(v.r); tcontrols.setScaleSnap(v.s); }
+$('#snapChk').addEventListener('change', ()=>{ updateSnapFromUI(); setDirty(true); autosaveSchedule(); });
+$('#transSnapSel').addEventListener('change', ()=>{ updateSnapFromUI(); setDirty(true); autosaveSchedule(); });
+$('#rotSnapSel').addEventListener('change', ()=>{ updateSnapFromUI(); setDirty(true); autosaveSchedule(); });
+$('#scaleSnapSel').addEventListener('change', ()=>{ updateSnapFromUI();
+(() => { const el = document.getElementById('gridOnTop'); if (el) el.addEventListener('change', () => updateGridOnTop()); })();
+setDirty(true); autosaveSchedule(); });
+
+// Kamera Views & Bookmarks
+const camState = { bookmarks: [null,null,null,null,null] };
+function captureCamera(){ return { pos:[camera.position.x, camera.position.y, camera.position.z], target:[controls.target.x, controls.target.y, controls.target.z], fov: camera.fov }; }
+let camTween = null; function easeInOutCubic(x){ return x<0.5 ? 4*x*x*x : 1 - Math.pow(-2*x+2,3)/2; }
+function goCamera(view, duration=450){
+  if(!view || !view.pos || !view.target) return;
+  camTween = { t0: performance.now(), dur: duration, fromPos: camera.position.clone(), toPos: new THREE.Vector3(view.pos[0],view.pos[1],view.pos[2]), fromTarget: controls.target.clone(), toTarget: new THREE.Vector3(view.target[0],view.target[1],view.target[2]), fromFov: camera.fov, toFov: view.fov ?? camera.fov };
+}
+function boxFromObjects(objs){
+  const box = new THREE.Box3(); let ok=false;
+  objs.forEach(o=>{ if(!o) return; const b = new THREE.Box3().setFromObject(o); if(isFinite(b.min.x) && isFinite(b.max.x)) { if(!ok){ box.copy(b); ok=true; } else { box.union(b); } } });
+  return ok ? box : null;
+}
+function frameBox(box){
+  if(!box) return;
+  const size = new THREE.Vector3(); box.getSize(size);
+  const center = new THREE.Vector3(); box.getCenter(center);
+  const radius = Math.max(size.x, size.y, size.z) * 0.5;
+  const fovRad = THREE.MathUtils.degToRad(camera.fov);
+  const dist = radius / Math.tan(fovRad/2) + radius * 0.6;
+  const dir = camera.position.clone().sub(controls.target).normalize();
+  const toPos = center.clone().add(dir.multiplyScalar(dist));
+  goCamera({ pos:[toPos.x,toPos.y,toPos.z], target:[center.x,center.y,center.z], fov: camera.fov });
+}
+document.getElementById('btn-view-iso').addEventListener('click', ()=>goCamera({ pos:[15,6,15], target:[1,0,0], fov:30 }));
+document.getElementById('btn-view-front').addEventListener('click', ()=>goCamera({ pos:[0,1.8,8], target:[0,1,0], fov:30 }));
+document.getElementById('btn-view-side').addEventListener('click', ()=>goCamera({ pos:[8,1.8,0], target:[0,1,0], fov:30 }));
+document.getElementById('btn-view-top').addEventListener('click', ()=>goCamera({ pos:[0,10,0], target:[0,0,0], fov:30 }));
+document.getElementById('btn-resetcam').addEventListener('click', ()=>{ camera.position.set(15,6,15); controls.target.set(1,0,0); controls.update(); });
+document.getElementById('btn-frame-sel').addEventListener('click', ()=>{ const rec = state.objects.find(o=>o.id===state.selectedId); if(!rec){ toast('Keine Auswahl'); return; } const b = new THREE.Box3().setFromObject(rec.group); frameBox(b); });
+document.getElementById('btn-frame-all').addEventListener('click', ()=>{ const b = boxFromObjects(state.objects.map(o=>o.group)); if(!b){ toast('Szene ist leer'); return; } frameBox(b); });
+document.getElementById('bmFold').addEventListener('toggle', ()=>{ if(document.getElementById('bmFold').open) renderBookmarks(); });
+function renderBookmarks(){
+  const root = document.getElementById('bmList'); if(!root) return;
+  root.innerHTML='';
+  for(let i=0;i<5;i++){
+    const slot = i+1;
+    const row = document.createElement('div'); row.className='row grid2';
+    const label = document.createElement('div'); label.className='slotlabel'; label.textContent = '#'+slot;
+    const name = document.createElement('input'); name.className='input'; name.placeholder = 'Bookmark '+slot; name.value = camState.bookmarks[i]?.name || '';
+    const btnSave = document.createElement('button'); btnSave.className='btn-small'; btnSave.textContent='Speichern';
+    const btnGo = document.createElement('button'); btnGo.className='btn-small'; btnGo.textContent='Gehe';
+    const btnDel = document.createElement('button'); btnDel.className='btn-small'; btnDel.textContent='✕';
+    btnSave.addEventListener('click', ()=>{ const v = captureCamera(); camState.bookmarks[i] = { name: (name.value || ('Bookmark '+slot)).trim(), ...v }; toast('Kamera gespeichert in Slot '+slot); setDirty(true); autosaveSchedule(); });
+    btnGo.addEventListener('click', ()=>{ const bk = camState.bookmarks[i]; if(!bk){ toast('Slot '+slot+' ist leer'); return; } goCamera(bk); });
+    btnDel.addEventListener('click', ()=>{ camState.bookmarks[i] = null; name.value=''; toast('Slot '+slot+' gelöscht'); setDirty(true); autosaveSchedule(); });
+    row.appendChild(label); row.appendChild(name); row.appendChild(btnSave); row.appendChild(btnGo); row.appendChild(btnDel); root.appendChild(row);
+  }
+}
+
+// Raumgröße
+$('#roomSize').addEventListener('input', ()=>{ const val = parseFloat($('#roomSize').value)||24; buildRoom(val); updateGridOnTop(); pushHistory({ type:'setting', payload:{ key:'roomSize', value:val, prev:null } }); autosaveSchedule(); setDirty(true); });
+
+// Datei-Import Button
+$('#file-glb').addEventListener('change', (e)=>{ const files=[...e.target.files||[]]; if(!files.length){ toast('Keine Dateien gewählt'); return; } files.forEach(addGLB); e.target.value=''; });
+
+// Save / Save As
+async function buildProjectBlob(){
+  const objects = [];
+  for(const o of state.objects){
+    let asset = null;
+    if(o.file){ const {base64,mime} = await fileToBase64(o.file); asset = { filename:o.file.name, mime, base64 }; }
+    const g=o.group; objects.push({ name: o.name, transform: snapshotTransform(g), asset, material: o.material||null });
+  }
+  const snapVals = getSnapValuesFromUI();
+  const cameraBookmarks = camState.bookmarks.map(b=> b ? ({name:b.name, pos:b.pos, target:b.target, fov:b.fov}) : null );
+  const data = { version:"2.0.0", meta:{ app:"WebAR Editor", projectName: projectName, savedAt: new Date().toISOString() },
+    settings:{ roomSize: parseFloat($('#roomSize').value)||24, fitSize: parseFloat($('#fitSize').value)||1.5, translationSnap: snapVals.t, rotationSnapDeg: snapVals.r ? THREE.MathUtils.radToDeg(snapVals.r) : null, scaleSnap: snapVals.s, snapEnabled: $('#snapChk').checked },
+    camera:{ last: captureCamera(), bookmarks: cameraBookmarks }, ui:{ bmOpen: !!document.getElementById('bmFold')?.open } , objects };
+  return new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+}
+async function saveProject({saveAs=false}={}){
+  const blob = await buildProjectBlob();
+  if ('showSaveFilePicker' in window){
+    try{
+      if(saveAs || !fileHandle){
+        fileHandle = await window.showSaveFilePicker({ suggestedName: (projectName ? projectName + '.webar' : 'projekt.webar'),
+          types: [{ description: 'WebAR Projekt', accept: {'application/json': ['.webar', '.json']} }] });
+      }
+      const writable = await fileHandle.createWritable(); await writable.write(blob); await writable.close();
+      toast('Projekt gespeichert'); setDirty(false); return true;
+    }catch(err){
+      if (err && (err.name === 'AbortError' || err.name === 'NotAllowedError' || err.name === 'SecurityError' || err.code === 20)){
+        toast('Speichern abgebrochen');
+      } else {
+        console.warn('Save error', err); toast('Konnte nicht speichern');
+      }
+      return false;
+    }
+  } else {
+    const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = (projectName ? projectName + '.webar' : 'projekt.webar'); a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); toast('Projekt gespeichert (.webar Download)'); setDirty(false); return true;
+  }
+}
+$('#btn-save').addEventListener('click', ()=>saveProject({saveAs:false}));
+(function(){ const saveAsBtn = document.getElementById('btn-save-as') || document.getElementById('btn-save-as-menu'); if(saveAsBtn){ saveAsBtn.addEventListener('click', ()=>saveProject({saveAs:true})); } })();
+
+// Import Project
+async function importProjectData(data){
+  [...state.objects].forEach(o=>doDelete(o.id)); state.objects = []; state.selectedId=null; tcontrols.detach();
+  if(data.meta?.projectName) setProjectName(data.meta.projectName);
+  if(data.settings){
+    if(typeof data.settings.roomSize!=='undefined'){ $('#roomSize').value = data.settings.roomSize; buildRoom(data.settings.roomSize); }
+    if(typeof data.settings.fitSize!=='undefined'){ $('#fitSize').value = data.settings.fitSize; }
+    if(typeof data.settings.snapEnabled!=='undefined'){ $('#snapChk').checked = !!data.settings.snapEnabled; }
+    if(typeof data.settings.translationSnap!=='undefined'){ $('#transSnapSel').value = data.settings.translationSnap ? String(data.settings.translationSnap) : ''; }
+    if(typeof data.settings.rotationSnapDeg!=='undefined'){ $('#rotSnapSel').value = data.settings.rotationSnapDeg ? String(data.settings.rotationSnapDeg) : ''; }
+    if(typeof data.settings.scaleSnap!=='undefined'){ $('#scaleSnapSel').value = data.settings.scaleSnap ? String(data.settings.scaleSnap) : ''; }
+    updateSnapFromUI();
+  }
+  camState.bookmarks = [null,null,null,null,null];
+  if(data.camera?.bookmarks){
+    data.camera.bookmarks.forEach((b,idx)=>{ if(b) camState.bookmarks[idx] = { name:b.name||('Bookmark '+(idx+1)), pos:b.pos, target:b.target, fov:b.fov||30 }; });
+  }
+  if(data.camera?.last){ goCamera(data.camera.last, 0); }
+  if(data.ui && typeof data.ui.bmOpen !== 'undefined'){ const f=document.getElementById('bmFold'); if(f) f.open = !!data.ui.bmOpen; }
+
+  for(const obj of (data.objects||[])){
+    if(obj.asset && obj.asset.base64){
+      const url = base64ToBlobUrl(obj.asset.base64, obj.asset.mime||'application/octet-stream');
+      const id = uid();
+      const {group} = await createGroupedFromURL(url, obj.name||'Objekt');
+      const t = obj.transform||{position:[0,0,0],rotationDeg:[0,0,0],scale:1};
+      applyTransform(group, t);
+      const bbox  = new THREE.Box3().setFromObject(group);
+      const helper = new THREE.Box3Helper(bbox, 0x60a5fa); helper.visible = false; helper.raycast = ()=>{}; scene.add(helper);
+      const rec = { id, name: group.name, file: null, url, group, bbox: helper };
+      if(typeof obj!=='undefined' && obj && obj.material){ rec.material = obj.material; try{ const props={color:obj.material.color, roughness:obj.material.roughness, metalness:obj.material.metalness}; const maps={ colorMap: obj.material.mapBase64||null, normalMap: obj.material.normalBase64||null }; if(obj.material.override){ applyMaterialOverrideToGroup(group, props, maps); } }catch(e){} }
+      state.objects.push(rec);
+    }else{
+      const id = uid();
+      const group = new THREE.Group(); group.name = obj.name || 'Objekt (ohne Asset)';
+      scene.add(group);
+      const t = obj.transform||{position:[0,0,0],rotationDeg:[0,0,0],scale:1};
+      applyTransform(group, t);
+      const bbox  = new THREE.Box3().setFromObject(group);
+      const helper = new THREE.Box3Helper(bbox, 0x60a5fa); helper.visible=false; helper.raycast=()=>{}; scene.add(helper);
+      const rec = { id, name: group.name, file: null, url: null, group, bbox: helper };
+      if(typeof obj!=='undefined' && obj && obj.material){ rec.material = obj.material; try{ const props={color:obj.material.color, roughness:obj.material.roughness, metalness:obj.material.metalness}; const maps={ colorMap: obj.material.mapBase64||null, normalMap: obj.material.normalBase64||null }; if(obj.material.override){ applyMaterialOverrideToGroup(group, props, maps); } }catch(e){} }
+      state.objects.push(rec);
+    }
+  }
+  rebuildList();
+  fileHandle = null; setDirty(false);
+  toast('Projekt geladen'); autosaveSchedule(true);
+}
+async function importProjectFile(file){
+  try{
+    const fallbackName = file && file.name ? file.name.replace(/\.(webar|json)$/i,'') : null;
+    const text = await file.text(); const data = JSON.parse(text);
+    if(!data.meta) data.meta = {}; if(!data.meta.projectName && fallbackName){ data.meta.projectName = fallbackName; }
+    await importProjectData(data);
+    try{ setProjectName((data && data.meta && data.meta.projectName) || fallbackName || 'Unbenanntes Projekt'); }catch(e){}
+  }catch(err){ console.error(err); toast('Konnte Projekt nicht laden'); }
+}
+$('#file-project').addEventListener('change', (e)=>{ const f = e.target.files?.[0]; if(!f){ e.target.value=''; return; } if(isDirty && !confirm('Es gibt ungespeicherte Änderungen. Trotzdem Projekt öffnen?')){ e.target.value=''; return; } importProjectFile(f); e.target.value=''; });
+
+// Autosave
+const AUTOSAVE_KEY = 'webar_autosave';
+var autosaveTimer = null;
+function autosaveSchedule(immediate=false){
+  if(autosaveTimer) if(autosaveTimer) clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(async ()=>{ const data = await buildProjectJSON(); try{ localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(data)); } catch(e){ console.warn('Autosave fehlgeschlagen', e); } }, immediate?0:800);
+}
+async function buildProjectJSON(){
+  const objects = [];
+  for(const o of state.objects){
+    if(o && o.kind==='group' && Array.isArray(o.children)){
+      for(const c of o.children){
+        let asset = null;
+        if(c.file){ const {base64,mime} = await fileToBase64(c.file); asset = { filename:c.file.name, mime, base64 }; }
+        objects.push({ name: c.name, transform: snapshotTransformWorld(c.group), asset });
+      }
+    } else {
+      let asset = null;
+      if(o.file){ const {base64,mime} = await fileToBase64(o.file); asset = { filename:o.file.name, mime, base64 }; }
+      objects.push({ name: o.name, transform: snapshotTransform(o.group), asset, material: o.material||null });
+    }
+  }
+  const snapVals = getSnapValuesFromUI();
+  const cameraBookmarks = camState.bookmarks.map(b=> b ? ({name:b.name, pos:b.pos, target:b.target, fov:b.fov}) : null );
+  return { version:"2.0.0", meta:{ app:"WebAR Editor", projectName: projectName, autosaveAt: new Date().toISOString() },
+    settings:{ roomSize: parseFloat($('#roomSize').value)||24, fitSize: parseFloat($('#fitSize').value)||1.5, translationSnap: snapVals.t, rotationSnapDeg: snapVals.r ? THREE.MathUtils.radToDeg(snapVals.r) : null, scaleSnap: snapVals.s, snapEnabled: $('#snapChk').checked },
+    camera:{ last: captureCamera(), bookmarks: cameraBookmarks }, ui:{ bmOpen: !!document.getElementById('bmFold')?.open }, objects };
+}
+window.addEventListener('blur', ()=>autosaveSchedule(true));
+async function tryRestoreAutosave(){ try{ const raw = localStorage.getItem(AUTOSAVE_KEY); if(!raw) return; if(confirm('Autosave gefunden. Wiederherstellen?')){ const data = JSON.parse(raw); await importProjectData(data);
+    try{ setProjectName((data && data.meta && data.meta.projectName) || fallbackName || 'Unbenanntes Projekt'); }catch(e){} } }catch(e){ console.warn('Autosave konnte nicht wiederhergestellt werden', e); } }
+
+// Duplicate & Drop-to-Floor
+function offsetClonePosition(pos){ return new THREE.Vector3(pos.x + 0.25, pos.y, pos.z + 0.25); }
+async function duplicateSelected(){
+  const src = state.objects.find(o=>o.id===state.selectedId); if(!src) return;
+  const id = uid();
+
+  const clonedRoot = SkeletonUtils.clone(src.group);
+  clonedRoot.position.set(0,0,0); clonedRoot.rotation.set(0,0,0); clonedRoot.scale.set(1,1,1);
+  const group = new THREE.Group(); group.name = uniqueName(src.name + ' (Kopie)'); group.add(clonedRoot); scene.add(group);
+
+  const t = snapshotTransform(src.group); const p = offsetClonePosition(src.group.position);
+  const t2 = { position:[p.x,p.y,p.z], rotationDeg:t.rotationDeg, scale:t.scale }; applyTransform(group, t2);
+
+  const bbox  = new THREE.Box3().setFromObject(group);
+  const helper = new THREE.Box3Helper(bbox, 0x60a5fa); helper.visible=false; helper.raycast=()=>{}; scene.add(helper);
+
+  const rec = { id, name: group.name, file: src.file || null, url: null, group, bbox: helper };
+  state.objects.push(rec);
+  selectObject(id); rebuildList(); toast('Dupliziert: '+group.name);
+
+  let asset = null;
+  if(src.file){ const {base64,mime} = await fileToBase64(src.file); asset = { filename:src.file.name, base64, mime }; }
+  pushHistory({ type:'duplicate', id, payload:{ name: group.name, transform: t2, sourceId: src.id, asset } }); autosaveSchedule();
+}
+function dropToFloorSelected(){
+  const rec = state.objects.find(o=>o.id===state.selectedId); if(!rec) return;
+  const before = snapshotTransform(rec.group);
+  const box = new THREE.Box3().setFromObject(rec.group);
+  const dy = -box.min.y;
+  if (Math.abs(dy) > 1e-6){
+    rec.group.position.y += dy;
+    const bbox = new THREE.Box3().setFromObject(rec.group); rec.bbox.box.copy(bbox); rec.bbox.updateMatrixWorld(true);
+    const after = snapshotTransform(rec.group);
+    pushHistory({ type:'edit', id:rec.id, payload:{ before, after } });
+    rebuildList(); toast('Auf Boden gesetzt'); autosaveSchedule();
+  }
+}
+$('#btn-duplicate').addEventListener('click', duplicateSelected);
+$('#btn-floor').addEventListener('click', dropToFloorSelected);
+
+// Undo/Redo
+async function undo( ){
+  // Commit pending gizmo drag before undoing
+  finalizePendingTransform();
+  const entry = history.pop();
+  if(!entry){ toast('Nichts zum Rückgängig machen'); return; }
+  // Put on future stack for redo
+  future.push(entry);
+
+  const selBefore = state.selectedId;
+  const getRec = (id)=> state.objects.find(o=>o.id===id);
+
+  try{
+    switch(entry.type){
+      case 'add': {
+        // remove the newly added object
+        const rec = getRec(entry.id);
+        if(rec){
+          // detach gizmo if attached to this object
+          if(tcontrols.object === rec.group) tcontrols.detach();
+          scene.remove(rec.group);
+          if(rec.bbox) scene.remove(rec.bbox);
+          const idx = state.objects.indexOf(rec);
+          if(idx>=0) state.objects.splice(idx,1);
+          if(state.selectedId === entry.id) state.selectedId = null;
+          rebuildList();
+        }
+        break;
+      }
+      case 'delete': {
+        // re-add previously deleted object (we kept the ref in payload.rec)
+        const rec = entry.payload?.rec;
+        if(rec){
+          scene.add(rec.group);
+          if(rec.bbox){
+            rec.bbox.box.setFromObject(rec.group);
+            rec.bbox.updateMatrixWorld(true);
+            scene.add(rec.bbox);
           }
-          if(!src) throw new Error('Keine GLB/GLTF-Quelle beim Objekt (Editor) gefunden');
-          const t = (typeof snapshotTransform==='function') ? snapshotTransform(rec.group) : {
-            position:[0,0,0], rotationDeg:[0,0,0], scale:1
-          };
-          const animIndex = (typeof rec.animIndex==='number') ? rec.animIndex : 0;
-          const audio = rec.audioURL || null;
-          return { src, scale: t.scale, rotationDeg: t.rotationDeg, position: t.position, animIndex, audio };
+          state.objects.push(rec);
+          // restore selection
+          state.selectedId = rec.id;
+          tcontrols.attach(rec.group);
+          rebuildList();
+        }
+        break;
+      }
+      case 'edit': {
+        // restore previous transform/name/visibility/lock/material if present
+        const rec = getRec(entry.id);
+        if(rec){
+          const b = entry.before||{};
+          if('name' in b){ rec.name = b.name; rec.group.name = b.name; }
+          if(b.transform){ applyTransform(rec.group, b.transform); }
+          if('visible' in b){ rec.group.visible = b.visible; }
+          if('locked' in b){ rec.locked = b.locked; }
+          if(b.material && rec.material){
+            // naive: copy known fields
+            Object.assign(rec.material, b.material);
+            applyMaterialToGroup(rec.group, rec.material);
+          }
+          // update bbox + UI
+          const bbox = new THREE.Box3().setFromObject(rec.group);
+          rec.bbox.box.copy(bbox); rec.bbox.updateMatrixWorld(true);
+          // keep selection
+          state.selectedId = rec.id;
+          tcontrols.attach(rec.group);
+          rebuildList(); fillPropInputsFrom(rec.group);
+        }
+        break;
+      }
+      case 'duplicate': {
+        // The duplicate created a new id => remove it
+        const rec = getRec(entry.payload?.newId || entry.id);
+        if(rec){
+          if(tcontrols.object === rec.group) tcontrols.detach();
+          scene.remove(rec.group);
+          if(rec.bbox) scene.remove(rec.bbox);
+          const idx = state.objects.indexOf(rec);
+          if(idx>=0) state.objects.splice(idx,1);
+          if(state.selectedId === rec.id) state.selectedId = null;
+          rebuildList();
+        }
+        break;
+      }
+      case 'setting': {
+        if(entry.before && entry.before.key === 'roomSize'){
+          const val = entry.before.value;
+          document.getElementById('roomSize').value = val;
+          buildRoom(val);
+        }
+        if(entry.before && entry.before.key === 'snap'){
+          const v = entry.before.value;
+          setSnapUI(v);
+          updateSnapFromUI();
+        }
+        break;
+      }
+      default:
+        // unsupported type - just ignore
+        break;
+    }
+  }catch(err){
+    console.error('Undo failed', err);
+    toast('Undo-Fehler (Konsole)');
+  }
+  updateUndoRedoButtons();
+  setDirty(true); autosaveSchedule();
+}
+
+async function redo( ){
+  finalizePendingTransform();
+  const entry = future.pop();
+  if(!entry){ toast('Nichts zum Wiederholen'); return; }
+  history.push(entry);
+
+  const getRec = (id)=> state.objects.find(o=>o.id===id);
+
+  try{
+    switch(entry.type){
+      case 'add': {
+        // re-add the object that we had removed on undo
+        const rec = entry.payload?.rec;
+        if(rec && !getRec(rec.id)){
+          scene.add(rec.group);
+          if(rec.bbox){
+            rec.bbox.box.setFromObject(rec.group);
+            rec.bbox.updateMatrixWorld(true);
+            scene.add(rec.bbox);
+          }
+          state.objects.push(rec);
+          state.selectedId = rec.id;
+          tcontrols.attach(rec.group);
+          rebuildList();
+        }
+        break;
+      }
+      case 'delete': {
+        // delete again
+        const rec = getRec(entry.id);
+        if(rec){
+          if(tcontrols.object === rec.group) tcontrols.detach();
+          scene.remove(rec.group);
+          if(rec.bbox) scene.remove(rec.bbox);
+          const idx = state.objects.indexOf(rec);
+          if(idx>=0) state.objects.splice(idx,1);
+          if(state.selectedId === rec.id) state.selectedId = null;
+          rebuildList();
+        }
+        break;
+      }
+      case 'edit': {
+        // apply the 'after' transform/name/etc
+        const rec = getRec(entry.id);
+        if(rec){
+          const a = entry.after||{};
+          if('name' in a){ rec.name = a.name; rec.group.name = a.name; }
+          if(a.transform){ applyTransform(rec.group, a.transform); }
+          if('visible' in a){ rec.group.visible = a.visible; }
+          if('locked' in a){ rec.locked = a.locked; }
+          if(a.material && rec.material){
+            Object.assign(rec.material, a.material);
+            applyMaterialToGroup(rec.group, rec.material);
+          }
+          const bbox = new THREE.Box3().setFromObject(rec.group);
+          rec.bbox.box.copy(bbox); rec.bbox.updateMatrixWorld(true);
+          state.selectedId = rec.id;
+          tcontrols.attach(rec.group);
+          rebuildList(); fillPropInputsFrom(rec.group);
+        }
+        break;
+      }
+      case 'duplicate': {
+        // recreate the duplicate that we removed on undo
+        if(entry.payload?.rec){
+          const rec = entry.payload.rec;
+          if(!getRec(rec.id)){
+            scene.add(rec.group);
+            if(rec.bbox){
+              rec.bbox.box.setFromObject(rec.group);
+              rec.bbox.updateMatrixWorld(true);
+              scene.add(rec.bbox);
+            }
+            state.objects.push(rec);
+            state.selectedId = rec.id;
+            tcontrols.attach(rec.group);
+            rebuildList();
+          }
+        }
+        break;
+      }
+      case 'setting': {
+        if(entry.after && entry.after.key === 'roomSize'){
+          const val = entry.after.value;
+          document.getElementById('roomSize').value = val;
+          buildRoom(val);
+        }
+        if(entry.after && entry.after.key === 'snap'){
+          const v = entry.after.value;
+          setSnapUI(v);
+          updateSnapFromUI();
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }catch(err){
+    console.error('Redo failed', err);
+    toast('Redo-Fehler (Konsole)');
+  }
+  updateUndoRedoButtons();
+  setDirty(true); autosaveSchedule();
+}
+
+$('#btn-undo').addEventListener('click', ()=>{ finalizePendingTransform(); undo(); });
+$('#btn-redo').addEventListener('click', ()=>{ finalizePendingTransform(); redo(); });
+
+// Top Buttons
+$('#btn-del').addEventListener('click', ()=>{ if(state.selectedId) deleteObjectWithHistory(state.selectedId); setDirty(true); });
+$('#btn-clear').addEventListener('click', ()=>{ if(isDirty && !confirm('Szene leeren? Ungespeicherte Änderungen gehen verloren.')) return; [...state.objects].forEach(o=>doDelete(o.id)); tcontrols.detach(); history.length=0; future.length=0; updateUndoRedoButtons(); setDirty(true); });
+$('#btn-snap').addEventListener('click', ()=>{ const url = renderer.domElement.toDataURL('image/png'); const a = document.createElement('a'); a.href = url; a.download = (projectName ? projectName+'-' : '') + 'screenshot.png'; a.click(); });
+
+function doNewProject(name){
+  [...state.objects].forEach(o=>doDelete(o.id));
+  state.objects=[]; state.selectedId=null;
+  $('#file-glb').value=''; $('#prop-name').value='';
+  ['posx','posy','posz','rotx','roty','rotz','scale'].forEach(id=>$('#'+id).value='');
+  buildRoom(parseFloat($('#roomSize').value)||24);
+updateGridOnTop(); tcontrols.detach();
+  history.length=0; future.length=0; updateUndoRedoButtons();
+  setDefaultView();
+  setProjectName(name);
+  try{ setProjectName(name); }catch(e){}
+  fileHandle = null; setDirty(false);
+  toast('Neues Projekt: '+projectName);
+  autosaveSchedule();
+}
+
+// Keyboard shortcuts
+window.addEventListener('keydown', (e)=>{
+  if (['INPUT','TEXTAREA','SELECT'].includes((e.target||{}).tagName)) return;
+  const ctrl = e.ctrlKey || e.metaKey;
+  if (ctrl && e.shiftKey && (e.key==='s' || e.key==='S')){ saveProject({saveAs:true}); e.preventDefault(); return; }
+  if (ctrl && (e.key==='s' || e.key==='S')){ saveProject({saveAs:false}); e.preventDefault(); return; }
+  if (ctrl && (e.key==='z' || e.key==='Z')){ finalizePendingTransform(); if(e.shiftKey){ redo(); } else { undo(); } e.preventDefault(); return; }
+  if (ctrl && (e.key==='y' || e.key==='Y')){ finalizePendingTransform(); redo(); e.preventDefault(); return; }
+  if (ctrl && (e.key==='d' || e.key==='D')){ duplicateSelected(); e.preventDefault(); return; }
+  if (e.key==='f' || e.key==='F'){ if(e.shiftKey){ const rec = state.objects.find(o=>o.id===state.selectedId); if(rec){ const b=new THREE.Box3().setFromObject(rec.group); frameBox(b); } else { toast('Keine Auswahl'); } } else { dropToFloorSelected(); } e.preventDefault(); return; }
+  if (e.key==='a'||e.key==='A'){ const b = boxFromObjects(state.objects.map(o=>o.group)); if(b) frameBox(b); e.preventDefault(); return; }
+  if (e.key==='w'||e.key==='W'){ tcontrols.setMode('translate'); updateToolButtons(); }
+  if (e.key==='e'||e.key==='E'){ tcontrols.setMode('rotate');   updateToolButtons(); }
+  if (e.key==='r'||e.key==='R'){ tcontrols.setMode('scale');    updateToolButtons(); }
+  if (e.key==='Delete'){ if(state.selectedId) deleteObjectWithHistory(state.selectedId); }
+  if (e.key==='Escape'){ clearSelection(); }
+
+  const num = parseInt(e.key, 10);
+  if(!Number.isNaN(num) && num>=1 && num<=5){
+    if(e.shiftKey){
+      const v = captureCamera(); const i = num-1;
+      const inputs = document.querySelectorAll('#bmList input');
+      const newName = (inputs[i]?.value?.trim()) || ('Bookmark '+num);
+      camState.bookmarks[i] = { name:newName, ...v }; setDirty(true); autosaveSchedule();
+    }else{
+      const bk = camState.bookmarks[num-1]; if(bk){ goCamera(bk); } else { toast('Slot '+num+' ist leer'); }
+    }
+    e.preventDefault(); return;
+  }
+});
+
+// Start
+buildRoom(parseFloat($('#roomSize').value)||24);
+updateGridOnTop();
+updateSnapFromUI(); updateUndoRedoButtons(); setProjectName(projectName);
+// tryRestoreAutosave(); // optional aktivieren
+
+function loop(){ requestAnimationFrame(loop); controls.update();
+  if(camTween){
+    const now = performance.now(); let t = (now - camTween.t0) / camTween.dur; if(t >= 1){ t = 1; }
+    const s = easeInOutCubic(t);
+    camera.position.copy(camTween.fromPos).lerp(camTween.toPos, s);
+    const tmp = camTween.fromTarget.clone().lerp(camTween.toTarget, s);
+    controls.target.copy(tmp);
+    camera.fov = camTween.fromFov + (camTween.toFov - camTween.fromFov) * s;
+    camera.updateProjectionMatrix();
+    if(t>=1){ camTween = null; }
+  }
+  renderer.render(scene,camera); }
+loop();
+
+
+// --- Inline-Rename via Event Delegation (stabil, keine Änderung an rebuildList) ---
+(() => {
+  const listEl = document.getElementById('sceneList');
+  if (!listEl) return;
+
+  listEl.addEventListener('dblclick', (ev) => {
+    const btn = ev.target.closest('button.tab');
+    if (!btn || !listEl.contains(btn)) return;
+    ev.stopPropagation();
+
+    // Index des Buttons ermitteln -> korrespondierendes Objekt in state.objects
+    const tabs = Array.from(listEl.querySelectorAll('button.tab'));
+    const idx  = tabs.indexOf(btn);
+    if (idx < 0 || idx >= state.objects.length) return;
+    const rec  = state.objects[idx];
+
+    // Input-Field anstelle des Buttons
+    const row = btn.parentNode;
+    const input = document.createElement('input');
+    input.className = 'input';
+    input.value = rec.name;
+
+    const commit = (save) => {
+      if (row.contains(input)) row.replaceChild(btn, input);
+      if (!save) return;
+      const val = (input.value || '').trim();
+      if (!val || val === rec.name) return;
+
+      const newName = uniqueRename(rec.id, val);
+      rec.name = newName;
+      if (rec.group) rec.group.name = newName;
+      if (state.selectedId === rec.id) {
+        const nm = document.getElementById('prop-name'); if (nm) nm.value = newName;
+      }
+      if (typeof autosaveSchedule === 'function') autosaveSchedule();
+      if (typeof setDirty === 'function') setDirty(true);
+      // Liste neu aufbauen, damit aktive Markierung & Titel stimmen
+      if (typeof rebuildList === 'function') rebuildList();
+    };
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') commit(true);
+      else if (e.key === 'Escape') commit(false);
+    });
+    input.addEventListener('blur', () => commit(true));
+
+    row.replaceChild(input, btn);
+    input.focus(); input.select();
+  });
+})();
+
+
+
+// === Sichtbarkeit (👁️) & Lock (🔒) — Add-on direkt im selben Modul ===
+function ensureFlags(rec){
+  if(typeof rec.hidden!=='boolean') rec.hidden=false;
+  if(typeof rec.locked!=='boolean') rec.locked=false;
+}
+function refreshRowState(row, rec){
+  const eye = row.querySelector('.iconbtn.eye');
+  const lock= row.querySelector('.iconbtn.lock');
+  if(eye){
+    eye.textContent = rec.hidden ? '🚫' : '👁️';
+    eye.title = rec.hidden ? 'Einblenden' : 'Ausblenden';
+    eye.classList.toggle('dim', rec.hidden);
+  }
+  if(lock){
+    lock.textContent = rec.locked ? '🔒' : '🔓';
+    lock.title = rec.locked ? 'Entsperren' : 'Sperren';
+    lock.classList.toggle('dim', rec.locked);
+  }
+  const nameBtn = row.querySelector('button.tab');
+  if(nameBtn){
+    nameBtn.style.opacity = rec.hidden ? 0.6 : 1;
+    nameBtn.style.pointerEvents = rec.locked ? 'none' : 'auto';
+  }
+}
+
+function enhanceSceneList(){
+  const root = document.getElementById('sceneList'); if(!root) return;
+  const rows = Array.from(root.querySelectorAll('.row'));
+  rows.forEach((row, idx)=>{
+    const rec = (state && state.objects && state.objects[idx]) ? state.objects[idx] : null;
+    if(!rec) return;
+    ensureFlags(rec);
+    const delBtn = row.querySelector('button.btn');
+    if(!row.querySelector('.iconbtn.eye')){
+      const eye = document.createElement('button'); eye.type='button'; eye.className='iconbtn eye';
+      row.insertBefore(eye, delBtn || null);
+    }
+    if(!row.querySelector('.iconbtn.lock')){
+      const lock = document.createElement('button'); lock.type='button'; lock.className='iconbtn lock';
+      row.insertBefore(lock, delBtn || null);
+    }
+    refreshRowState(row, rec);
+  });
+}
+
+// Delegierte Klicks für 👁️ / 🔒
+document.getElementById('sceneList').addEventListener('click', (ev)=>{
+  const eyeBtn = ev.target.closest('.iconbtn.eye');
+  const lockBtn= ev.target.closest('.iconbtn.lock');
+  if(!eyeBtn && !lockBtn) return;
+
+  const row = ev.target.closest('.row'); if(!row) return;
+  const rows = Array.from(document.getElementById('sceneList').querySelectorAll('.row'));
+  const idx = rows.indexOf(row); if(idx<0) return;
+  const rec = state.objects[idx]; if(!rec) return;
+  ensureFlags(rec);
+
+  if(eyeBtn){
+    // vor dem Hide ggf. Auswahl aufheben
+    if(rec.id===state.selectedId && rec.group && rec.group.visible){
+      if(typeof clearSelection==='function') clearSelection();
+    }
+    rec.hidden = !rec.hidden;
+    if(rec.group) rec.group.visible = !rec.hidden;
+    if(rec.bbox) rec.bbox.visible = false;
+    refreshRowState(row, rec);
+    if (typeof autosaveSchedule === 'function') autosaveSchedule();
+    if (typeof setDirty === 'function') setDirty(true);
+  }
+  if(lockBtn){
+    if(rec.id===state.selectedId && !rec.locked){
+      if(typeof clearSelection==='function') clearSelection();
+    }
+    rec.locked = !rec.locked;
+    refreshRowState(row, rec);
+    if (typeof autosaveSchedule === 'function') autosaveSchedule();
+    if (typeof setDirty === 'function') setDirty(true);
+  }
+});
+
+// Nach jedem Rebuild die Icons aktualisieren (ohne rebuildList zu ersetzen)
+(function(){
+  if(typeof rebuildList==='function'){
+    const _orig = rebuildList;
+    rebuildList = function(){ _orig(); try{ enhanceSceneList(); }catch(e){} };
+    try{ enhanceSceneList(); }catch(e){}
+  }
+})();
+
+// Shortcuts auf Auswahl: V (sichtbar), L (lock)
+window.addEventListener('keydown', (e)=>{
+  if (['INPUT','TEXTAREA','SELECT'].includes((e.target||{}).tagName)) return;
+  const rec = state.objects ? state.objects.find(o=>o.id===state.selectedId) : null;
+  if(!rec) return;
+  if(e.key==='v' || e.key==='V'){
+    if(rec.id===state.selectedId && rec.group && rec.group.visible){
+      if(typeof clearSelection==='function') clearSelection();
+    }
+    rec.hidden = !rec.hidden;
+    if(rec.group) rec.group.visible = !rec.hidden;
+    if(rec.bbox) rec.bbox.visible = false;
+    try{ enhanceSceneList(); }catch(e){}
+    if (typeof autosaveSchedule === 'function') autosaveSchedule();
+    if (typeof setDirty === 'function') setDirty(true);
+  }else if(e.key==='l' || e.key==='L'){
+    if(rec.id===state.selectedId && !rec.locked){
+      if(typeof clearSelection==='function') clearSelection();
+    }
+    rec.locked = !rec.locked;
+    try{ enhanceSceneList(); }catch(e){}
+    if (typeof autosaveSchedule === 'function') autosaveSchedule();
+    if (typeof setDirty === 'function') setDirty(true);
+  }
+});
+
+
+
+// --- Inline-Umbenennen des Projektnamens (Doppelklick auf #projName) ---
+(function enableProjectInlineRename(){
+  const el = document.getElementById('projName');
+  if(!el) return;
+  el.style.cursor = 'text';
+  function startEdit(){
+    // ursprünglichen Namen sichern (ohne Stern)
+    const original = (typeof projectName!=='undefined' && projectName) ? projectName : (el.textContent||'').replace(/\s*\*$/,'').trim();
+    el.contentEditable = 'true';
+    // Stern ausblenden während der Eingabe
+    el.textContent = original;
+    // Alles markieren
+    const range = document.createRange(); range.selectNodeContents(el);
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+    function endEdit(save){
+      el.contentEditable = 'false';
+      const val = (el.textContent||'').trim();
+      if(save){
+        const newName = val || original;
+        try{ setProjectName(newName); }catch(e){}
+        if (typeof autosaveSchedule === 'function') autosaveSchedule();
+        if (typeof setDirty === 'function') setDirty(true);
+      }else{
+        try{ setProjectName(original); }catch(e){}
+      }
+      el.removeEventListener('keydown', onKey);
+      el.removeEventListener('blur', onBlur);
+    }
+    function onKey(e){
+      if(e.key==='Enter'){ e.preventDefault(); endEdit(true); }
+      else if(e.key==='Escape'){ e.preventDefault(); endEdit(false); }
+    }
+    function onBlur(){ endEdit(true); }
+    el.addEventListener('keydown', onKey);
+    el.addEventListener('blur', onBlur);
+  }
+  el.addEventListener('dblclick', (e)=>{ e.preventDefault(); startEdit(); });
+})();
+
+
+// Snap panel show/hide based on Snap aktiv
+(function(){
+  const snapChkEl = document.getElementById('snapChk');
+  const panel = document.getElementById('snapPanel');
+  if(!snapChkEl || !panel) return;
+  function updatePanel(){ panel.style.display = snapChkEl.checked ? '' : 'none'; }
+  updatePanel();
+  snapChkEl.addEventListener('change', updatePanel);
+})();
+
+
+
+// --- Hint FAB behaviour (hover or click to expand/collapse) ---
+(function(){
+  const hint = document.querySelector('.hint');
+  const fab  = document.getElementById('hintFab');
+  if(!hint || !fab) return;
+  let hideTimer = null;
+  function openHint(){ if(hideTimer){ clearTimeout(hideTimer); hideTimer=null; } hint.classList.remove('hidden'); fab.setAttribute('aria-expanded','true'); fab.classList.add('open'); try{ fab.textContent='×'; }catch(_){} }
+  function closeHint(){ if(hideTimer){ clearTimeout(hideTimer); hideTimer=null; } hint.classList.add('hidden'); fab.setAttribute('aria-expanded','false'); fab.classList.remove('open'); try{ fab.textContent='i'; }catch(_){} }
+  // Start hidden
+  hint.classList.add('hidden');
+  // Hover behaviour
+  fab.addEventListener('mouseenter', openHint);
+  fab.addEventListener('mouseleave', ()=>{
+    hideTimer = setTimeout(()=>{ if(!hint.matches(':hover') && !fab.matches(':hover')) closeHint(); }, 200);
+  });
+  hint.addEventListener('mouseleave', ()=>{
+    hideTimer = setTimeout(()=>{ if(!fab.matches(':hover')) closeHint(); }, 100);
+  });
+  hint.addEventListener('mouseenter', ()=>{ if(hideTimer){ clearTimeout(hideTimer); hideTimer=null; } });
+  // Click toggle (also for touch)
+  fab.addEventListener('click', (e)=>{
+    e.preventDefault();
+    if(hint.classList.contains('hidden')) openHint(); else closeHint();
+  }, {passive:false});
+})();
+
+
+// --- Grouping helpers ---
+function adoptKeepWorld(child, newParent){
+  child.updateMatrixWorld(true);
+  const parentWorldInv = new THREE.Matrix4().copy(newParent.matrixWorld).invert();
+  const childWorld = child.matrixWorld.clone();
+  const local = parentWorldInv.multiply(childWorld);
+  child.matrix.copy(local);
+  child.matrix.decompose(child.position, child.quaternion, child.scale);
+  newParent.add(child);
+  child.updateMatrixWorld(true);
+}
+function detachKeepWorld(child, newParent){ // newParent is scene
+  child.updateMatrixWorld(true);
+  const world = child.matrixWorld.clone();
+  newParent.add(child);
+  child.matrix.copy(world);
+  child.matrix.decompose(child.position, child.quaternion, child.scale);
+  child.updateMatrixWorld(true);
+}
+
+
+
+// --- Helpers for Undo/Redo of Group/Ungroup (no history push inside) ---
+function _groupFromIds(childIds, forcedId, name, groupTransform){
+  const recs = (childIds||[]).map(id=> state.objects.find(o=>o.id===id)).filter(Boolean);
+  if(recs.length < 2) return null;
+  const gid = forcedId || uid();
+  const g = new THREE.Group(); g.name = name || uniqueName('Gruppe');
+  scene.add(g);
+  if(groupTransform){ applyTransform(g, groupTransform); }
+  const children = [];
+  recs.forEach(r=>{
+    if(r.bbox){ scene.remove(r.bbox); }
+    adoptKeepWorld(r.group, g);
+    children.push(r);
+  });
+  const bbox = new THREE.Box3().setFromObject(g);
+  const helper = new THREE.Box3Helper(bbox, 0x60a5fa); helper.visible=false; helper.raycast=()=>{}; scene.add(helper);
+  state.objects = state.objects.filter(o=> !childIds.includes(o.id));
+  const grec = { id: gid, name: g.name, group: g, bbox: helper, hidden:false, locked:false, kind:'group', children };
+  state.objects.push(grec);
+  return grec;
+}
+function _ungroupById(groupId){
+  const rec = state.objects.find(o=>o.id===groupId);
+  if(!rec || rec.kind!=='group') return null;
+  rec.children.forEach(childRec=>{
+    detachKeepWorld(childRec.group, scene);
+    if(childRec.bbox){ scene.add(childRec.bbox); childRec.bbox.box.setFromObject(childRec.group); childRec.bbox.updateMatrixWorld(true); }
+    state.objects.push(childRec);
+  });
+  scene.remove(rec.group);
+  if(rec.bbox) scene.remove(rec.bbox);
+  state.objects = state.objects.filter(o=>o.id!==rec.id);
+  return rec.children.map(c=>c.id);
+}
+function getSelectionIds(){
+  if(state.selection && state.selection.size>0) return Array.from(state.selection);
+  return state.selectedId ? [state.selectedId] : [];
+}
+
+function groupSelection(){
+  const ids = getSelectionIds();
+  if(ids.length<2){ toast('Mindestens 2 Objekte auswählen'); return; }
+  const recs = ids.map(id=> state.objects.find(o=>o.id===id)).filter(Boolean);
+  if(!recs.length) return;
+
+  // Create group
+  const gid = uid();
+  const g = new THREE.Group();
+  const name = uniqueName('Gruppe');
+  g.name = name;
+  scene.add(g);
+  // Pivot at centroid of selection
+  const centroid = new THREE.Vector3();
+  recs.forEach(r=> centroid.add(r.group.getWorldPosition(new THREE.Vector3())));
+  centroid.multiplyScalar(1/recs.length);
+  g.position.copy(centroid); g.updateMatrixWorld(true);
+
+  // Move children under group, keep world transform
+  const children = [];
+  recs.forEach(r=>{
+    // hide bbox while grouped
+    if(r.bbox){ scene.remove(r.bbox); }
+    adoptKeepWorld(r.group, g);
+    children.push(r);
+  });
+
+  // BBox helper for group
+  const bbox = new THREE.Box3().setFromObject(g);
+  const helper = new THREE.Box3Helper(bbox, 0x60a5fa); helper.visible=false; helper.raycast=()=>{}; scene.add(helper);
+
+  // Remove child recs from top-level list
+  state.objects = state.objects.filter(o=> !ids.includes(o.id));
+
+  const grec = { id: gid, name, group: g, bbox: helper, hidden:false, locked:false, kind:'group', children };
+  state.objects.push(grec);
+
+  // Select new group
+  state.selection.clear(); state.selection.add(gid); state.selectedId = gid;
+  tcontrols.attach(g);
+  rebuildList(); toast('Gruppe gebildet');
+  pushHistory({ type:'group', id: gid, payload:{ name, childIds: ids.slice(), groupTransform: snapshotTransform(g) } }); autosaveSchedule && autosaveSchedule();
+}
+
+function ungroupSelected(){
+  const rec = state.objects.find(o=>o.id===state.selectedId);
+  if(!rec || rec.kind!=='group'){ toast('Keine Gruppe ausgewählt'); return; }
+  // Detach children back to scene
+  rec.children.forEach(childRec=>{
+    detachKeepWorld(childRec.group, scene);
+    // restore bbox
+    if(childRec.bbox){ scene.add(childRec.bbox); childRec.bbox.box.setFromObject(childRec.group); childRec.bbox.updateMatrixWorld(true); }
+    state.objects.push(childRec);
+  });
+  // Remove group
+  scene.remove(rec.group);
+  if(rec.bbox) scene.remove(rec.bbox);
+  state.objects = state.objects.filter(o=>o.id!==rec.id);
+
+  // Select children
+  state.selection = new Set(rec.children.map(c=>c.id));
+  state.selectedId = rec.children[rec.children.length-1].id;
+  tcontrols.detach();
+  rebuildList(); toast('Gruppe aufgelöst');
+  pushHistory({ type:'ungroup', id: rec.id, payload:{ name: rec.name, childIds: rec.children.map(c=>c.id), groupTransform: snapshotTransform(rec.group) } }); autosaveSchedule && autosaveSchedule();
+}
+
+document.getElementById('btn-group')?.addEventListener('click', groupSelection);
+document.getElementById('btn-ungroup')?.addEventListener('click', ungroupSelected);
+
+// Flatten groups on save: world-space snapshot for children
+function snapshotTransformWorld(obj){
+  const pos = new THREE.Vector3(); const quat = new THREE.Quaternion(); const scl = new THREE.Vector3();
+  obj.updateMatrixWorld(true); obj.matrixWorld.decompose(pos, quat, scl);
+  const eul = new THREE.Euler().setFromQuaternion(quat, 'XYZ');
+  return { position:[pos.x,pos.y,pos.z], rotationDeg:[THREE.MathUtils.radToDeg(eul.x),THREE.MathUtils.radToDeg(eul.y),THREE.MathUtils.radToDeg(eul.z)], scale: scl.x };
+}
+
+
+function updateSelectionBoxes(){
+  try{
+    state.objects.forEach(o=>{ if(o.bbox) o.bbox.visible = false; });
+    if(typeof multiSelHelper!=='undefined' && multiSelHelper){
+      scene.remove(multiSelHelper);
+      multiSelHelper.geometry?.dispose?.();
+      multiSelHelper.material?.dispose?.();
+      multiSelHelper = null;
+    }
+    const selIds = state.selection ? Array.from(state.selection) : (state.selectedId ? [state.selectedId] : []);
+    if(selIds.length===0) return;
+    if(selIds.length===1){
+      const id = selIds[0];
+      const rec = state.objects.find(o=>o.id===id);
+      if(rec && rec.bbox){
+        rec.bbox.box.setFromObject(rec.group);
+        rec.bbox.updateMatrixWorld(true);
+        rec.bbox.visible = true;
+      }
+      return;
+    }
+    selIds.forEach(id=>{
+      const rec = state.objects.find(o=>o.id===id);
+      if(rec && rec.bbox){
+        rec.bbox.box.setFromObject(rec.group);
+        rec.bbox.updateMatrixWorld(true);
+        rec.bbox.visible = true;
+      }
+    });
+  }catch(e){ console.warn('updateSelectionBoxes failed', e); }
+}
+
+
+// Ensure the scene list shows all multi-selected rows
+function applySelectionStylesToList(){
+  try{
+    const set = state.selection || new Set();
+    const rows = Array.from(document.querySelectorAll('#sceneList .row'));
+    rows.forEach((row, idx)=>{
+      const rec = state.objects[idx];
+      const tab = row.querySelector('.tab');
+      if(!rec || !tab) return;
+      if(set.has(rec.id)) tab.classList.add('sel'); else tab.classList.remove('sel');
+    });
+  }catch(e){}
+}
+
+// Rewrap rebuildList to also apply selection styles and re-add eye/lock icons
+(function(){
+  if(typeof rebuildList==='function'){
+    const _orig = rebuildList;
+    rebuildList = function(){ _orig(); try{ enhanceSceneList && enhanceSceneList(); }catch(e){} try{ applySelectionStylesToList(); }catch(e){} };
+    try{ enhanceSceneList && enhanceSceneList(); }catch(e){} try{ applySelectionStylesToList(); }catch(e){}
+  }
+})();
+
+
+
+// --- Space (Local/World) toggle for TransformControls ---
+let currentSpace = 'local';
+function updateSpaceButtons(){
+  ['space-local','space-world'].forEach(id=>document.getElementById(id)?.classList.remove('space-active'));
+  document.getElementById(currentSpace==='local'?'space-local':'space-world')?.classList.add('space-active');
+}
+function setSpace(space){
+  currentSpace = (space==='world') ? 'world' : 'local';
+  try{ tcontrols.setSpace(currentSpace); }catch(e){}
+  updateSpaceButtons();
+}
+document.getElementById('space-local')?.addEventListener('click', ()=> setSpace('local'));
+document.getElementById('space-world')?.addEventListener('click', ()=> setSpace('world'));
+updateSpaceButtons();
+
+// Shortcut: Q toggles local/world
+window.addEventListener('keydown', (e)=>{
+  if (['INPUT','TEXTAREA'].includes((e.target||{}).tagName)) return;
+  if (e.key==='q' || e.key==='Q'){ setSpace(currentSpace==='local'?'world':'local'); }
+});
+
+
+
+// === Pivot Marker + "Pivot = BBox‑Mitte" ===
+let pivotMarker = null;
+function ensurePivotMarker(){
+  if(pivotMarker) return pivotMarker;
+  const g = new THREE.Group();
+  // small cross made of lines
+  const mat = new THREE.LineBasicMaterial({ color: 0x60a5fa, transparent:true, opacity:0.9, depthTest:false, depthWrite:false });
+  function seg(a,b){
+    const geo = new THREE.BufferGeometry().setFromPoints([a,b]);
+    const line = new THREE.Line(geo, mat);
+    g.add(line);
+  }
+  const s = 0.15;
+  seg(new THREE.Vector3(-s,0,0), new THREE.Vector3(s,0,0));
+  seg(new THREE.Vector3(0,-s,0), new THREE.Vector3(0,s,0));
+  seg(new THREE.Vector3(0,0,-s), new THREE.Vector3(0,0,s));
+  pivotMarker = g;
+  scene.add(pivotMarker);
+  pivotMarker.visible = false;
+  return pivotMarker;
+}
+function hidePivotMarker(){
+  if(pivotMarker){ pivotMarker.visible = false; }
+}
+function updatePivotMarkerFor(rec){
+  ensurePivotMarker();
+  if(!rec || !rec.group){ hidePivotMarker(); return; }
+  // place at group's origin (pivot) in world
+  const wp = new THREE.Vector3();
+  rec.group.getWorldPosition(wp);
+  pivotMarker.position.copy(wp);
+  pivotMarker.visible = true;
+  pivotMarker.updateMatrixWorld(true);
+}
+
+// Button: Pivot = BBox-Mitte (für selektiertes Objekt/Gruppe)
+// verschiebt den lokalen Pivot ohne die sichtbare Lage zu verändern
+document.getElementById('btn-pivot-center')?.addEventListener('click', ()=>{
+  const rec = state.objects.find(o=>o.id===state.selectedId);
+  if(!rec || !rec.group){ toast('Bitte ein Objekt/Gruppe auswählen'); return; }
+  // Nur bei Einzelauswahl sinnvoll
+  if(state.selection && state.selection.size>1){
+    toast('Bitte einzelne Auswahl verwenden (oder Gruppe bilden)');
+    return;
+  }
+  // Welt-BBox
+  const box = new THREE.Box3().setFromObject(rec.group);
+  const worldCenter = new THREE.Vector3(); box.getCenter(worldCenter);
+  // In lokale Koordinaten der Gruppe
+  const localCenter = rec.group.worldToLocal(worldCenter.clone());
+  // 1) Kinder relativ verschieben (Translation -localCenter)
+  rec.group.children.forEach(ch=>{
+    if(ch === pivotMarker) return;
+    ch.position.sub(localCenter);
+  });
+  // 2) Gruppen-Translation kompensieren (Translation +localCenter, im Elternraum)
+  // delta = localCenter transformiert durch Gruppen-Rotation/Skalierung
+  const delta = localCenter.clone().applyQuaternion(rec.group.quaternion);
+  // Uniform-Scale berücksichtigen (wir erzwingen sowieso uniform)
+  delta.multiply(rec.group.scale);
+  rec.group.position.add(delta);
+  rec.group.updateMatrixWorld(true);
+  // BBox/Helper/PivotMarker updaten
+  if(rec.bbox){ rec.bbox.box.setFromObject(rec.group); rec.bbox.updateMatrixWorld(true); }
+  updatePivotMarkerFor(rec);
+  autosaveSchedule && autosaveSchedule();
+  setDirty && setDirty(true);
+  toast('Pivot auf BBox-Mitte gesetzt');
+});
+
+// Hook: bei Auswahländerung und Transform-Änderung Marker aktualisieren
+(function(){
+  // wrap selectObject to also update marker
+  if(typeof selectObject==='function'){
+    const _sel = selectObject;
+    selectObject = function(id, opts={}){
+      _sel(id, opts);
+      try{
+        const rec = state.objects.find(o=>o.id===state.selectedId);
+        if(state.selection && state.selection.size>1) hidePivotMarker();
+        else updatePivotMarkerFor(rec);
+      }catch(e){}
+    }
+  }
+  // bei Clear Selection Marker verstecken
+  if(typeof clearSelection==='function'){
+    const _clr = clearSelection;
+    clearSelection = function(){
+      _clr(); hidePivotMarker();
+    }
+  }
+  // bei Gizmo-Move Marker mitziehen (nur Einzelauswahl)
+  tcontrols.addEventListener('objectChange', ()=>{
+    if(state.selection && state.selection.size>1) return;
+    const rec = state.objects.find(o=>o.id===state.selectedId);
+    updatePivotMarkerFor(rec);
+  });
+  // beim Start Marker einmal initialisieren
+  try{ hidePivotMarker(); }catch(e){}
+})();
+
+
+
+// === Scene tree context menu + Solo/Isolate ===
+let isolateActive = false;
+let isolateSet = new Set();
+let preHidden = new Map();
+
+function setRecVisibility(rec, hidden){
+  try{
+    rec.hidden = !!hidden;
+    if(rec.group) rec.group.visible = !rec.hidden;
+    if(rec.bbox) rec.bbox.visible = false; // bbox will be recomputed when selected
+  }catch(e){}
+}
+function toggleRecVisibility(rec){
+  setRecVisibility(rec, !rec.hidden);
+}
+function toggleRecLock(rec){
+  rec.locked = !rec.locked;
+}
+
+function isolateSelection(ids){
+  if(!ids || !ids.length) return;
+  isolateActive = true;
+  isolateSet = new Set(ids);
+  // backup hidden state
+  preHidden.clear();
+  state.objects.forEach(o=> preHidden.set(o.id, !!o.hidden));
+  // hide all not in isolateSet
+  state.objects.forEach(o=>{
+    const shouldHide = !isolateSet.has(o.id);
+    setRecVisibility(o, shouldHide);
+  });
+  rebuildList(); try{ updateSelectionBoxes(); }catch(e){}
+  toast('Isolation aktiv');
+}
+function endIsolation(){
+  if(!isolateActive){ return; }
+  isolateActive = false;
+  // restore hidden
+  state.objects.forEach(o=>{
+    const wasHidden = preHidden.has(o.id) ? preHidden.get(o.id) : false;
+    setRecVisibility(o, wasHidden);
+  });
+  preHidden.clear(); isolateSet.clear();
+  rebuildList(); try{ updateSelectionBoxes(); }catch(e){}
+  toast('Isolation beendet');
+}
+
+(function setupContextMenu(){
+  const menu = document.getElementById('ctxMenu');
+  const sceneList = document.getElementById('sceneList');
+  if(!menu || !sceneList) return;
+  let targetIndex = -1;
+  let targetId = null;
+
+  function showMenu(x,y){
+    menu.style.display='block';
+    menu.style.left = x+'px';
+    menu.style.top  = y+'px';
+    // toggle isolate items visibility
+    menu.querySelector('[data-act="isolate"]').style.display = isolateActive ? 'none' : '';
+    menu.querySelector('[data-act="unisolate"]').style.display = isolateActive ? '' : 'none';
+  }
+  function hideMenu(){ menu.style.display='none'; }
+
+  sceneList.addEventListener('contextmenu', (e)=>{
+    const row = e.target.closest('.row');
+    if(!row) return;
+    e.preventDefault();
+    const rows = Array.from(sceneList.querySelectorAll('.row'));
+    targetIndex = rows.indexOf(row);
+    const rec = state.objects[targetIndex];
+    targetId = rec ? rec.id : null;
+
+    // select the row if not part of selection (without clearing on Ctrl)
+    if(rec){
+      if(!state.selection?.has(rec.id)){
+        selectObject(rec.id);
+      }
+    }
+
+    const rect = sceneList.getBoundingClientRect();
+    showMenu(e.clientX, e.clientY);
+  });
+
+  document.addEventListener('click', (e)=>{
+    if(menu.style.display==='block' && !menu.contains(e.target)) hideMenu();
+  });
+  document.addEventListener('keydown', (e)=>{
+    if(e.key==='Escape') hideMenu();
+  });
+
+  menu.addEventListener('click', (e)=>{
+    const actEl = e.target.closest('.item'); if(!actEl) return;
+    const act = actEl.dataset.act;
+    hideMenu();
+    const rec = state.objects.find(o=>o.id===targetId);
+    if(!rec) return;
+    // Determine current selection set (if multi selected, operate on all)
+    const ids = (state.selection && state.selection.size>0) ? Array.from(state.selection) : [rec.id];
+    const recs = ids.map(id=> state.objects.find(o=>o.id===id)).filter(Boolean);
+
+    switch(act){
+      case 'rename':{
+        if(recs.length!==1){ toast('Bitte genau ein Objekt/Gruppe wählen'); break; }
+        const name = prompt('Neuer Name:', rec.name||''); if(!name) break;
+        rec.name = name.trim();
+        rec.group && (rec.group.name = rec.name);
+        rebuildList(); autosaveSchedule && autosaveSchedule(); setDirty && setDirty(true);
+        break;
+      }
+      case 'toggleVis':{
+        recs.forEach(r=> toggleRecVisibility(r));
+        rebuildList(); try{ updateSelectionBoxes(); }catch(e){} autosaveSchedule && autosaveSchedule(); setDirty && setDirty(true);
+        break;
+      }
+      case 'toggleLock':{
+        recs.forEach(r=> toggleRecLock(r));
+        rebuildList(); autosaveSchedule && autosaveSchedule(); setDirty && setDirty(true);
+        break;
+      }
+      case 'duplicate':{
+        document.getElementById('btn-duplicate')?.click();
+        break;
+      }
+      case 'delete':{
+        ids.slice().forEach(id=> deleteObject(id));
+        break;
+      }
+      case 'isolate':{
+        isolateSelection(ids);
+        break;
+      }
+      case 'unisolate':{
+        endIsolation();
+        break;
+      }
+    }
+  });
+
+  // Keyboard shortcut for isolate
+  window.addEventListener('keydown', (e)=>{
+    if(['INPUT','TEXTAREA'].includes((e.target||{}).tagName)) return;
+    if(e.key==='s' || e.key==='S'){
+      if(isolateActive) endIsolation();
+      else{
+        const ids = state.selection && state.selection.size>0 ? Array.from(state.selection) : (state.selectedId?[state.selectedId]:[]);
+        if(ids.length) isolateSelection(ids);
+      }
+    }
+  });
+})();
+
+
+
+// === Drag & Drop in Szenenbaum (reorder + in Gruppen ziehen) ===
+(function(){
+  const sceneList = document.getElementById('sceneList');
+  const dropLine  = document.getElementById('dropLine');
+  if(!sceneList || !dropLine) return;
+
+  let dragId = null;
+  let dragIndex = -1;
+  let overIndex = -1;
+  let overMode = 'none'; // 'before' | 'after' | 'onto' | 'none'
+
+  function rows(){ return Array.from(sceneList.querySelectorAll('.row')); }
+
+  function enableDraggable(){
+    rows().forEach((row, idx)=>{
+      const rec = state.objects[idx];
+      const tab = row.querySelector('.tab');
+      if(!tab) return;
+      // lock: cannot drag locked sources
+      if(rec?.locked){
+        tab.removeAttribute('draggable');
+        return;
+      }
+      tab.setAttribute('draggable', 'true');
+      tab.addEventListener('dragstart', (e)=>{
+        dragIndex = idx; dragId = rec?.id || null;
+        row.classList.add('dragging');
+        try{ e.dataTransfer.setData('text/plain', dragId||''); }catch(_){}
+        try{ e.dataTransfer.effectAllowed = 'move'; }catch(_){}
+      });
+      tab.addEventListener('dragend', ()=>{
+        rows().forEach(r=> r.classList.remove('dragging','drop-onto'));
+        hideLine();
+        dragId = null; dragIndex = -1; overIndex = -1; overMode = 'none';
+      });
+    });
+  }
+
+  function hideLine(){ dropLine.style.display='none'; }
+  function showLineAt(y){
+    dropLine.style.display='block';
+    const listRect = sceneList.getBoundingClientRect();
+    dropLine.style.top = (y - listRect.top + sceneList.scrollTop) + 'px';
+  }
+
+  sceneList.addEventListener('dragover', (e)=>{
+    if(dragId==null) return;
+    e.preventDefault();
+    const rws = rows();
+    // find the row under pointer
+    const row = e.target.closest('.row');
+    rws.forEach(r=> r.classList.remove('drop-onto'));
+    overMode = 'none'; overIndex = -1; hideLine();
+    if(!row){ return; }
+    const idx = rws.indexOf(row);
+    overIndex = idx;
+    const rec = state.objects[idx];
+    const rect = row.getBoundingClientRect();
+    const y = e.clientY;
+    const rel = (y - rect.top) / rect.height;
+
+    // Drop rules:
+    // - if target is a group and not locked -> allow ONTO
+    // - otherwise: BEFORE/AFTER (reorder among top-level)
+    if(rec && rec.kind==='group' && !rec.locked && rec.id !== dragId){
+      // Center area (30%-70%) -> ONTO
+      if(rel>=0.30 && rel<=0.70){
+        overMode = 'onto';
+        row.classList.add('drop-onto');
+      }else if(rel < 0.30){
+        overMode = 'before'; showLineAt(rect.top);
+      }else{
+        overMode = 'after'; showLineAt(rect.bottom);
+      }
+    }else{
+      // reorder only (ignore if same row)
+      if(idx !== dragIndex){
+        if(rel < 0.5){ overMode = 'before'; showLineAt(rect.top); }
+        else{ overMode = 'after'; showLineAt(rect.bottom); }
+      }
+    }
+  });
+
+  sceneList.addEventListener('drop', (e)=>{
+    if(dragId==null) return;
+    e.preventDefault();
+    const rws = rows();
+    const row = e.target.closest('.row');
+    rws.forEach(r=> r.classList.remove('drop-onto'));
+    hideLine();
+
+    if(!row){ dragId=null; return; }
+    const idx = rws.indexOf(row);
+    const targetRec = state.objects[idx];
+    const srcIndex = dragIndex;
+    const srcRec = state.objects[srcIndex];
+    if(!srcRec){ dragId=null; return; }
+    if(targetRec && targetRec.locked){ dragId=null; return; }
+
+    // Prevent no-op drops
+    if(idx===srcIndex && overMode!=='onto'){ dragId=null; return; }
+
+    // Handle ONTO (reparent) or BEFORE/AFTER (reorder)
+    if(overMode==='onto' && targetRec && targetRec.kind==='group' && targetRec.id!==srcRec.id){
+      // Reparent into group (keep world transform)
+      const startParentId = null; // top-level only listed
+      const endParentId = targetRec.id;
+      // Perform
+      adoptKeepWorld(srcRec.group, targetRec.group);
+      // remove bbox temporarily (keep for child? we keep it but not shown)
+      if(srcRec.bbox){ scene.remove(srcRec.bbox); }
+      // remove from top-level list
+      state.objects.splice(srcIndex, 1);
+      // add as child of group record
+      targetRec.children = targetRec.children || [];
+      targetRec.children.push(srcRec);
+
+      // History push (reparent)
+      pushHistory && pushHistory({
+        type:'reparent',
+        id: srcRec.id,
+        payload:{ fromParentId:startParentId, toParentId:endParentId }
+      });
+
+      // Update selection: select the group
+      state.selection = new Set([targetRec.id]);
+      state.selectedId = targetRec.id;
+      tcontrols.attach(targetRec.group);
+      rebuildList(); toast(`In Gruppe "${targetRec.name}" verschoben`);
+      autosaveSchedule && autosaveSchedule();
+      return;
+    }
+
+    // Reorder among top-level
+    let toIndex = idx + (overMode==='after' ? 1 : 0);
+    // If dragging downward past itself, adjust index after removing
+    const fromIndex = srcIndex;
+    const moved = state.objects.splice(fromIndex,1)[0];
+    if(toIndex > fromIndex) toIndex -= 1;
+    if(toIndex < 0) toIndex = 0;
+    if(toIndex > state.objects.length) toIndex = state.objects.length;
+    state.objects.splice(toIndex, 0, moved);
+
+    // History push (reorder)
+    pushHistory && pushHistory({ type:'reorder', id: moved.id, payload:{ fromIndex, toIndex } });
+
+    // Keep selection on moved item
+    state.selection = new Set([moved.id]);
+    state.selectedId = moved.id;
+    tcontrols.attach(moved.group);
+    rebuildList(); toast('Reihenfolge geändert');
+    autosaveSchedule && autosaveSchedule();
+  });
+
+  // Prevent default on dragenter to allow drop
+  sceneList.addEventListener('dragenter', (e)=>{ if(dragId!=null) e.preventDefault(); });
+  sceneList.addEventListener('dragleave', (e)=>{
+    const over = e.relatedTarget;
+    if(!sceneList.contains(over)){ hideLine(); rows().forEach(r=> r.classList.remove('drop-onto')); }
+  });
+
+  // Hook into rebuildList so rows remain draggable
+  const _origRebuild = rebuildList;
+  rebuildList = function(){ _origRebuild(); try{ enableDraggable(); }catch(e){} };
+  // initial enable
+  try{ enableDraggable(); }catch(e){}
+
+})();
+
+// --- Undo/Redo Cases for reorder/reparent ---
+(function(){
+  // Wrap undo/redo to add our new cases if not already present
+  if(typeof undo==='function'){
+    const _undo = undo;
+    undo = function(){
+      const entry = history.pop();
+      if(!entry) return;
+      switch(entry.type){
+        case 'reorder':{
+          // Move element back to fromIndex
+          const i = state.objects.findIndex(o=>o.id===entry.id);
+          if(i>=0){
+            const it = state.objects.splice(i,1)[0];
+            let idx = entry.payload.fromIndex;
+            if(idx<0) idx=0;
+            if(idx>state.objects.length) idx=state.objects.length;
+            state.objects.splice(idx,0,it);
+            state.selection = new Set([it.id]); state.selectedId = it.id; tcontrols.attach(it.group);
+            rebuildList(); toast('Undo: Reihenfolge');
+          }
+          break;
+        }
+        case 'reparent':{
+          // Move child back to top-level from group
+          const childId = entry.id;
+          // find the group containing it
+          const grp = state.objects.find(o=>o.kind==='group' && o.children?.some(c=>c.id===childId));
+          let childRec = null;
+          if(grp){
+            const idx = grp.children.findIndex(c=>c.id===childId);
+            childRec = grp.children.splice(idx,1)[0];
+            detachKeepWorld(childRec.group, scene);
+            // restore bbox in scene
+            if(childRec.bbox){ scene.add(childRec.bbox); childRec.bbox.box.setFromObject(childRec.group); childRec.bbox.updateMatrixWorld(true); }
+            state.objects.push(childRec);
+            state.selection = new Set([childRec.id]); state.selectedId = childRec.id; tcontrols.attach(childRec.group);
+            rebuildList(); toast('Undo: Reparent');
+          }
+          break;
+        }
+        default: return _undo(); // delegate to original cases
+      }
+      autosaveSchedule && autosaveSchedule();
+    };
+  }
+  if(typeof redo==='function'){
+    const _redo = redo;
+    redo = function(){
+      const entry = future.pop();
+      if(!entry) return;
+      switch(entry.type){
+        case 'reorder':{
+          // Apply reorder to toIndex
+          const i = state.objects.findIndex(o=>o.id===entry.id);
+          if(i>=0){
+            const it = state.objects.splice(i,1)[0];
+            let idx = entry.payload.toIndex;
+            if(idx<0) idx=0;
+            if(idx>state.objects.length) idx=state.objects.length;
+            state.objects.splice(idx,0,it);
+            state.selection = new Set([it.id]); state.selectedId = it.id; tcontrols.attach(it.group);
+            rebuildList(); toast('Redo: Reihenfolge');
+          }
+          break;
+        }
+        case 'reparent':{
+          // Move child into group again
+          const childId = entry.id;
+          const targetId = entry.payload.toParentId;
+          const childRec = state.objects.find(o=>o.id===childId);
+          const targetRec = state.objects.find(o=>o.id===targetId);
+          if(childRec && targetRec && targetRec.kind==='group'){
+            adoptKeepWorld(childRec.group, targetRec.group);
+            if(childRec.bbox){ scene.remove(childRec.bbox); }
+            // remove from top-level list
+            const idxTop = state.objects.findIndex(o=>o.id===childId);
+            state.objects.splice(idxTop,1);
+            targetRec.children = targetRec.children || [];
+            targetRec.children.push(childRec);
+            state.selection = new Set([targetRec.id]); state.selectedId = targetRec.id; tcontrols.attach(targetRec.group);
+            rebuildList(); toast('Redo: Reparent');
+          }
+          break;
+        }
+        default: return _redo(); // delegate
+      }
+      autosaveSchedule && autosaveSchedule();
+    };
+  }
+})();
+
+
+
+// === Aus Gruppe lösen (Kinder -> Top-Ebene) + Status Badge ===
+
+// Unparent all children of a group to top-level
+function unparentAllFromGroup(groupId){
+  const rec = state.objects.find(o=>o.id===groupId);
+  if(!rec || rec.kind!=='group') return [];
+  const movedIds = [];
+  const children = (rec.children||[]).slice();
+  children.forEach(childRec=>{
+    detachKeepWorld(childRec.group, scene);
+    if(childRec.bbox){ scene.add(childRec.bbox); childRec.bbox.box.setFromObject(childRec.group); childRec.bbox.updateMatrixWorld(true); }
+    state.objects.push(childRec);
+    movedIds.push(childRec.id);
+  });
+  rec.children.length = 0;
+  rebuildList(); try{ updateSelectionBoxes && updateSelectionBoxes(); }catch(e){}
+  return movedIds;
+}
+
+// Context menu integration
+(function(){
+  const menu = document.getElementById('ctxMenu');
+  const sceneList = document.getElementById('sceneList');
+  if(!menu || !sceneList) return;
+
+  // adjust visibility of 'unparentAll' per target row
+  const _show = menu.style && menu.style.display !== undefined ? (x)=>menu.style.display=x : ()=>{};
+
+  // Wrap existing contextmenu listener by augmenting showMenu UI
+  // We already set items for isolate; add dynamic for unparentAll
+  const isolateItem = menu.querySelector('[data-act="isolate"]');
+  const unisolateItem = menu.querySelector('[data-act="unisolate"]');
+  const unparentItem = menu.querySelector('[data-act="unparentAll"]');
+
+  sceneList.addEventListener('contextmenu', (e)=>{
+    const row = e.target.closest('.row');
+    if(!row) return;
+    const rows = Array.from(sceneList.querySelectorAll('.row'));
+    const idx = rows.indexOf(row);
+    const rec = state.objects[idx];
+    if(unparentItem){
+      // Show only for groups that have children
+      if(rec && rec.kind==='group' && rec.children && rec.children.length>0){
+        unparentItem.style.display = '';
+      }else{
+        unparentItem.style.display = 'none';
+      }
+    }
+  });
+
+  menu.addEventListener('click', (e)=>{
+    const actEl = e.target.closest('.item'); if(!actEl) return;
+    const act = actEl.dataset.act;
+    if(act!=='unparentAll') return;
+    // determine current target: selected group or row chosen earlier
+    const ids = state.selection && state.selection.size>0 ? Array.from(state.selection) : (state.selectedId?[state.selectedId]:[]);
+    const rec = state.objects.find(o=>o.id===ids[0]);
+    if(!rec || rec.kind!=='group'){ toast('Bitte zuerst eine Gruppe wählen'); return; }
+    if(!rec.children || rec.children.length===0){ toast('Gruppe hat keine Kinder'); return; }
+
+    // History push
+    pushHistory && pushHistory({
+      type:'unparentAll',
+      id: rec.id,
+      payload:{ childIds: rec.children.map(c=>c.id) }
+    });
+
+    const moved = unparentAllFromGroup(rec.id);
+    // Auswahl auf die eben gelösten Kinder setzen
+    if(moved.length){
+      state.selection = new Set(moved);
+      state.selectedId = moved[moved.length-1];
+      tcontrols.detach();
+      rebuildList(); try{ updateSelectionBoxes(); }catch(e){}
+      toast('Kinder an Top-Ebene verschoben');
+      autosaveSchedule && autosaveSchedule();
+    }
+  });
+})();
+
+// Undo/Redo for unparentAll
+(function(){
+  if(typeof undo==='function'){
+    const _undo = undo;
+    undo = function(){
+      const entry = history.pop();
+      if(!entry) return;
+      switch(entry.type){
+        case 'unparentAll':{
+          // Undo -> move children back into the group
+          const groupRec = state.objects.find(o=>o.id===entry.id);
+          const childIds = entry.payload.childIds||[];
+          if(groupRec && groupRec.kind==='group'){
+            // collect child recs from top-level
+            const childRecs = childIds.map(id=> state.objects.find(o=>o.id===id)).filter(Boolean);
+            childRecs.forEach(cr=>{
+              adoptKeepWorld(cr.group, groupRec.group);
+              if(cr.bbox){ scene.remove(cr.bbox); }
+              const idxTop = state.objects.findIndex(o=>o.id===cr.id);
+              if(idxTop>=0) state.objects.splice(idxTop,1);
+              groupRec.children.push(cr);
+            });
+            state.selection = new Set([groupRec.id]); state.selectedId = groupRec.id; tcontrols.attach(groupRec.group);
+            rebuildList(); toast('Undo: Kinder zurück in Gruppe');
+          }
+          break;
+        }
+        default: return _undo();
+      }
+      autosaveSchedule && autosaveSchedule();
+    };
+  }
+  if(typeof redo==='function'){
+    const _redo = redo;
+    redo = function(){
+      const entry = future.pop();
+      if(!entry) return;
+      switch(entry.type){
+        case 'unparentAll':{
+          // Redo -> move children to top-level again
+          const moved = unparentAllFromGroup(entry.id);
+          if(moved.length){
+            state.selection = new Set(moved); state.selectedId = moved[moved.length-1]; tcontrols.detach();
+            rebuildList(); toast('Redo: Kinder an Top-Ebene');
+          }
+          break;
+        }
+        default: return _redo();
+      }
+      autosaveSchedule && autosaveSchedule();
+    };
+  }
+})();
+
+// --- Status Badge ---
+
+function updateStatusBadge(){
+  const isSnap = document.getElementById('snapChk')?.checked;
+  const isSolo = (typeof isolateActive!=='undefined') ? !!isolateActive : false;
+  const space  = (typeof currentSpace!=='undefined') ? currentSpace : 'local';
+
+  // Hint pills (inside info panel)
+  const hSpace = document.getElementById('hint-pill-space');
+  const hSnap  = document.getElementById('hint-pill-snap');
+  const hSolo  = document.getElementById('hint-pill-solo');
+  if(hSpace) hSpace.textContent = 'Space: ' + (space==='world'?'World':'Local');
+  if(hSnap)  hSnap.textContent  = 'Snap: ' + (isSnap?'An':'Aus');
+  if(hSolo)  hSolo.style.display = isSolo ? '' : 'none';
+
+  // Overlay pills (viewport corner)
+  const vSpace = document.getElementById('vp-pill-space');
+  const vSnap  = document.getElementById('vp-pill-snap');
+  const vSolo  = document.getElementById('vp-pill-solo');
+  if(vSpace) vSpace.textContent = 'Space: ' + (space==='world'?'World':'Local');
+  if(vSnap)  vSnap.textContent  = 'Snap: ' + (isSnap?'An':'Aus');
+  if(vSolo)  vSolo.style.display = isSolo ? '' : 'none';
+}
+
+
+// Hook into space/snap/solo changes
+(function(){
+  // Snap checkbox
+  const snap = document.getElementById('snapChk');
+  if(snap){ snap.addEventListener('change', updateStatusBadge); }
+  // Space changes
+  const spLocal = document.getElementById('space-local');
+  const spWorld = document.getElementById('space-world');
+  [spLocal, spWorld].forEach(el=> el && el.addEventListener('click', updateStatusBadge));
+  // Solo (isolate) toggles – we hook into isolateSelection/endIsolation if present
+  if(typeof isolateSelection==='function'){
+    const _iso = isolateSelection;
+    isolateSelection = function(ids){ const r=_iso(ids); try{ updateStatusBadge(); }catch(e){} return r; };
+  }
+  if(typeof endIsolation==='function'){
+    const _end = endIsolation;
+    endIsolation = function(){ const r=_end(); try{ updateStatusBadge(); }catch(e){} return r; };
+  }
+  // Initial
+  try{ updateStatusBadge(); }catch(e){}
+})();
+
+
+
+
+// --- Material Slots UI (thumbnails + per-slot apply) ---
+let matClipboard = { color:null, roughness:null, metalness:null, colorMap:null, normalMap:null };
+
+function textureToDataURL(tex){
+  try{
+    if(!tex || !tex.image) return null;
+    const img = tex.image;
+    if (img.src) return img.src;
+    const c = document.createElement('canvas');
+    const w = Math.max(1, img.width || img.videoWidth || 64);
+    const h = Math.max(1, img.height|| img.videoHeight|| 64);
+    c.width = Math.min(256, w); c.height = Math.min(256, h);
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL('image/png');
+  }catch(e){ return null; }
+}
+
+function collectMaterialSlots(group){
+  const map = new Map();
+  group && group.traverse(obj=>{
+    if(obj.isMesh){
+      const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+      for(const m of mats){
+        if(!m) continue;
+        let rec = map.get(m.uuid);
+        if(!rec){ rec = { uuid:m.uuid, material:m, meshes:new Set() }; map.set(m.uuid, rec); }
+        rec.meshes.add(obj);
+      }
+    }
+  });
+  let i=0;
+  return Array.from(map.values()).map(s=>({ 
+    idx: ++i, uuid:s.uuid, material:s.material, meshes:Array.from(s.meshes), useCount:s.meshes.size, 
+    name: s.material.name || `Slot ${i}` 
+  }));
+}
+
+function renderMaterialSlotsFor(rec){
+  const root = document.getElementById('mat-slots');
+  if(!root) return;
+  root.innerHTML = '';
+  if(!rec){ root.innerHTML = '<div class="subtle">Keine Auswahl</div>'; return; }
+  const slots = collectMaterialSlots(rec.group);
+  if(!slots.length){ root.innerHTML = '<div class="subtle">Keine Materialien gefunden</div>'; return; }
+
+  for(const s of slots){
+    const row = document.createElement('div'); row.className='slotrow';
+
+    // thumbs
+    const colorThumb = document.createElement('div'); colorThumb.className='thumb';
+    const baseThumb  = document.createElement('div'); baseThumb.className='thumb';
+    const normThumb  = document.createElement('div'); normThumb.className='thumb';
+
+    // color swatch
+    try{
+      const col = s.material.color ? '#'+s.material.color.getHexString() : '#888888';
+      colorThumb.style.background = col;
+      colorThumb.title = 'Farbe';
+    }catch(e){ colorThumb.textContent = '—'; }
+
+    // basecolor map
+    const baseSrc = s.material.map ? textureToDataURL(s.material.map) : null;
+    if(baseSrc){
+      const img = document.createElement('img'); img.src = baseSrc; img.style.maxWidth='100%'; img.style.maxHeight='100%'; img.alt='BaseColor';
+      baseThumb.appendChild(img);
+    }else{ baseThumb.textContent='BC'; }
+    baseThumb.title='BaseColor';
+
+    // normal map
+    const normSrc = s.material.normalMap ? textureToDataURL(s.material.normalMap) : null;
+    if(normSrc){
+      const img = document.createElement('img'); img.src = normSrc; img.style.maxWidth='100%'; img.style.maxHeight='100%'; img.alt='Normal';
+      normThumb.appendChild(img);
+    }else{ normThumb.textContent='N'; }
+    normThumb.title='Normal Map';
+
+    // label
+    const lab = document.createElement('div');
+    const name = document.createElement('div'); name.className='slotname'; name.textContent = s.name;
+    const meta = document.createElement('div'); meta.className='slotmeta'; meta.textContent = `verwendet: ×${s.useCount}`;
+    lab.appendChild(name); lab.appendChild(meta);
+
+    // buttons
+    const btnLoad = document.createElement('button'); btnLoad.className='slotbtn'; btnLoad.textContent='→ Eingaben';
+    btnLoad.addEventListener('click', ()=>{
+      const colorEl = document.getElementById('mat-color'); if(colorEl){ const c = s.material.color ? '#'+s.material.color.getHexString() : '#ffffff'; colorEl.value = c; }
+      const roughEl = document.getElementById('mat-rough'); if(roughEl) roughEl.value = String(s.material.roughness ?? 0.5);
+      const metalEl = document.getElementById('mat-metal'); if(metalEl) metalEl.value = String(s.material.metalness ?? 0.0);
+      // clipboard inkl. maps
+      window.matClipboard = {
+        color: document.getElementById('mat-color')?.value || null,
+        roughness: parseFloat(document.getElementById('mat-rough')?.value||'0.5'),
+        metalness: parseFloat(document.getElementById('mat-metal')?.value||'0.0'),
+        colorMap: baseSrc || null,
+        normalMap: normSrc || null
+      };
+      toast('Slot → Eingaben übernommen');
+    });
+
+    const btnApplySlot = document.createElement('button'); btnApplySlot.className='slotbtn'; btnApplySlot.textContent='Nur Slot anwenden';
+    btnApplySlot.addEventListener('click', async ()=>{
+      const { color, roughness, metalness, mapFile, normalFile } = getMaterialInputs();
+      const props = { color, roughness, metalness };
+      let colorMap64 = null, normalMap64 = null;
+      if(mapFile || normalFile){
+        const m = await buildMapsData(mapFile, normalFile, { colorMap:null, normalMap:null });
+        colorMap64 = m.colorMap; normalMap64 = m.normalMap;
+      }else if(window.matClipboard?.colorMap || window.matClipboard?.normalMap){
+        colorMap64 = window.matClipboard.colorMap || null;
+        normalMap64 = window.matClipboard.normalMap || null;
+      }else{
+        colorMap64 = baseSrc || null;
+        normalMap64 = normSrc || null;
+      }
+      const maps = { colorMap: colorMap64, normalMap: normalMap64 };
+      for(const mesh of s.meshes){
+        if(mesh && mesh.isMesh){
+          if(!mesh.userData.origMaterial) mesh.userData.origMaterial = mesh.material;
+          const newMat = makeStandardMaterialFromProps(props, maps);
+          mesh.material = newMat; mesh.material.needsUpdate = true;
         }
       }
-      // 2) Manuelle Szene wenn aktiviert
-      if($('#m-enable')?.checked){
-        const src = $('#m-src').value.trim();
-        if(!src) throw new Error('Manuelle Szene: GLB/GLTF URL fehlt');
-        const scale = parseFloat($('#m-scale').value||'1')||1;
-        const animIndex = parseInt($('#m-anim').value||'0',10)||0;
-        const audio = ($('#m-audio').value||'').trim() || null;
-        const rx = parseFloat($('#m-rx').value||'0')||0;
-        const ry = parseFloat($('#m-ry').value||'0')||0;
-        const rz = parseFloat($('#m-rz').value||'0')||0;
-        const px = parseFloat($('#m-px').value||'0')||0;
-        const py = parseFloat($('#m-py').value||'0')||0;
-        const pz = parseFloat($('#m-pz').value||'0')||0;
-        return {
-          src, scale, rotationDeg:[rx,ry,rz], position:[px,py,pz], animIndex, audio
-        };
+      if (typeof setDirty === 'function') setDirty(true);
+      if (typeof autosaveSchedule === 'function') autosaveSchedule();
+      toast('Slot‑Material angewendet');
+    });
+
+    // assemble
+    row.appendChild(colorThumb);
+    row.appendChild(baseThumb);
+    row.appendChild(normThumb);
+    row.appendChild(lab);
+    const btns = document.createElement('div'); btns.style.display='flex'; btns.style.gap='6px';
+    btns.appendChild(btnLoad);
+    btns.appendChild(btnApplySlot);
+    row.appendChild(btns);
+    root.appendChild(row);
+  }
+}
+// === Material Panel ===
+const texLoader = new THREE.TextureLoader();
+
+function makeStandardMaterialFromProps(props, maps){
+  const mat = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(props?.color || '#ffffff'),
+    roughness: (props?.roughness!=null) ? props.roughness : 0.5,
+    metalness: (props?.metalness!=null) ? props.metalness : 0.0
+  });
+  if(maps && maps.colorMap){
+    const t = texLoader.load(maps.colorMap); // data URL ok
+    if(t) t.colorSpace = THREE.SRGBColorSpace;
+    mat.map = t;
+  }
+  if(maps && maps.normalMap){
+    const n = texLoader.load(maps.normalMap);
+    mat.normalMap = n;
+  }
+  mat.needsUpdate = true;
+  return mat;
+}
+
+function applyMaterialOverrideToGroup(group, props, maps){
+  group.traverse(obj=>{
+    if(obj.isMesh){
+      if(!obj.userData.origMaterial) obj.userData.origMaterial = obj.material;
+      obj.material = makeStandardMaterialFromProps(props, maps);
+    }
+  });
+}
+
+function restoreOriginalMaterial(group){
+  group.traverse(obj=>{
+    if(obj.isMesh && obj.userData.origMaterial){
+      obj.material = obj.userData.origMaterial;
+      delete obj.userData.origMaterial;
+    }
+  });
+}
+
+async function fileToDataUrl(file){
+  return new Promise((resolve,reject)=>{
+    const r = new FileReader();
+    r.onload = ()=> resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
+function getMaterialInputs(){
+  const override = !!document.getElementById('mat-override')?.checked;
+  const color = document.getElementById('mat-color')?.value || '#ffffff';
+  const rough = parseFloat(document.getElementById('mat-rough')?.value||'0.5');
+  const metal = parseFloat(document.getElementById('mat-metal')?.value||'0.0');
+  const mapFile = document.getElementById('mat-map')?.files?.[0] || null;
+  const normalFile = document.getElementById('mat-normal')?.files?.[0] || null;
+  return { override, color, roughness:rough, metalness:metal, mapFile, normalFile };
+}
+
+async function buildMapsData(mapFile, normalFile, prev){
+  const maps = { colorMap: prev?.colorMap || null, normalMap: prev?.normalMap || null };
+  if(mapFile){ maps.colorMap = await fileToDataUrl(mapFile); }
+  if(normalFile){ maps.normalMap = await fileToDataUrl(normalFile); }
+  return maps;
+}
+
+function refreshMaterialPanelFor(rec){
+  const overrideEl = document.getElementById('mat-override');
+  const colorEl = document.getElementById('mat-color');
+  const roughEl = document.getElementById('mat-rough');
+  const metalEl = document.getElementById('mat-metal');
+  if(!rec){ 
+    if(overrideEl) overrideEl.checked = false;
+    if(colorEl) colorEl.value = '#ffffff';
+    if(roughEl) roughEl.value = '0.5';
+    if(metalEl) metalEl.value = '0.0';
+    return;
+  }
+  const m = rec.material || {};
+  if(overrideEl) overrideEl.checked = !!m.override;
+  if(colorEl) colorEl.value = m.color || '#ffffff';
+  if(roughEl) roughEl.value = String(m.roughness!=null ? m.roughness : 0.5);
+  if(metalEl) metalEl.value = String(m.metalness!=null ? m.metalness : 0.0);
+  const mapIn = document.getElementById('mat-map'); if(mapIn) mapIn.value='';
+  const normIn= document.getElementById('mat-normal'); if(normIn) normIn.value='';
+}
+
+// Apply
+document.getElementById('btn-mat-apply')?.addEventListener('click', async ()=>{
+  const ids = state.selection && state.selection.size>0 ? Array.from(state.selection) : (state.selectedId?[state.selectedId]:[]);
+  if(ids.length===0){ toast('Bitte eine Auswahl treffen'); return; }
+  const {override, color, roughness, metalness, mapFile, normalFile} = getMaterialInputs();
+  const props = { color, roughness, metalness };
+  for(const id of ids){
+    const rec = state.objects.find(o=>o.id===id);
+    if(!rec) continue;
+    rec.material = rec.material || {};
+    const prevMaps = { colorMap: rec.material?.mapBase64 || null, normalMap: rec.material?.normalBase64 || null };
+    const maps = await buildMapsData(mapFile, normalFile, prevMaps);
+    rec.material = { override, color, roughness, metalness, mapBase64: maps.colorMap, normalBase64: maps.normalMap };
+    if(override){
+      applyMaterialOverrideToGroup(rec.group, props, maps);
+    }else{
+      restoreOriginalMaterial(rec.group);
+    }
+    if(rec.bbox){ rec.bbox.box.setFromObject(rec.group); rec.bbox.updateMatrixWorld(true); }
+  }
+  autosaveSchedule && autosaveSchedule();
+  setDirty && setDirty(true);
+  toast('Material angewendet');
+});
+
+// Reset
+document.getElementById('btn-mat-reset')?.addEventListener('click', ()=>{
+  const ids = state.selection && state.selection.size>0 ? Array.from(state.selection) : (state.selectedId?[state.selectedId]:[]);
+  if(ids.length===0){ toast('Bitte eine Auswahl treffen'); return; }
+  ids.forEach(id=>{
+    const rec = state.objects.find(o=>o.id===id);
+    if(!rec) return;
+    restoreOriginalMaterial(rec.group);
+    delete rec.material;
+    if(rec.bbox){ rec.bbox.box.setFromObject(rec.group); rec.bbox.updateMatrixWorld(true); }
+  });
+  const overrideEl = document.getElementById('mat-override'); if(overrideEl) overrideEl.checked=false;
+  const colorEl = document.getElementById('mat-color'); if(colorEl) colorEl.value='#ffffff';
+  const roughEl = document.getElementById('mat-rough'); if(roughEl) roughEl.value='0.5';
+  const metalEl = document.getElementById('mat-metal'); if(metalEl) metalEl.value='0.0';
+  const mapIn = document.getElementById('mat-map'); if(mapIn) mapIn.value='';
+  const normIn= document.getElementById('mat-normal'); if(normIn) normIn.value='';
+  autosaveSchedule && autosaveSchedule();
+  setDirty && setDirty(true);
+  toast('Material zurückgesetzt');
+});
+
+(function(){
+  if(typeof selectObject==='function'){
+    const _sel = selectObject;
+    selectObject = function(id, opts={}){
+      _sel(id, opts);
+      if(state.selection && state.selection.size===1){
+        const rec = state.objects.find(o=>o.id===state.selectedId);
+        refreshMaterialPanelFor(rec); renderMaterialSlotsFor(rec);
+      }else{
+        refreshMaterialPanelFor(null); renderMaterialSlotsFor(null);
       }
-      throw new Error('Kein Objekt gewählt und manuelle Szene nicht aktiviert.');
     }
+  }
+})();
 
-    function baseViewerURL(){
-      return $("#pub-viewer-url")?.value?.trim() || "./viewer.html";
+</script>
+
+<script id="undo-removed-stable">
+(function(){
+  function $(s){ return document.querySelector(s); }
+  // No-op shims so existing calls don't crash
+  window.pushHistory = function(){ /* removed */ };
+  window.undo = function(){ /* removed */ };
+  window.redo = function(){ /* removed */ };
+  window.canUndo = function(){ return false; };
+  window.canRedo = function(){ return false; };
+  window.updateUndoRedoButtons = function(){
+    try{
+      var u = $('#btn-undo'), r = $('#btn-redo');
+      if(u) u.setAttribute('disabled','disabled');
+      if(r) r.setAttribute('disabled','disabled');
+    }catch(e){}
+  };
+  // Block keyboard shortcuts
+  window.addEventListener('keydown', function(e){
+    var ctrl = e.ctrlKey || e.metaKey;
+    var k = (e.key||'').toLowerCase();
+    if(ctrl && (k==='z' || k==='y')){
+      e.stopImmediatePropagation(); e.stopPropagation(); e.preventDefault();
     }
+  }, true);
+  // Initial state update
+  try{ updateUndoRedoButtons(); }catch(e){}
+})();
+</script>
 
-    async function makeSurfaceARLink(){
-      const payload = await buildScenePayload();
-      payload.mode = 'surface';
-      return baseViewerURL() + encodeHash(payload);
-    }
 
-    async function makeImageARLink(file, widthMeters){
-      if(!file) throw new Error('Kein Trigger-Bild gewählt');
-      if(typeof fileToBase64!=='function') throw new Error('fileToBase64 fehlt');
-      const imgData = await fileToBase64(file);
-      const payload = await buildScenePayload();
-      payload.mode = 'image';
-      payload.image = imgData;
-      payload.imageWidthMeters = Number(widthMeters)||0.2;
-      return baseViewerURL() + encodeHash(payload);
-    }
+<!-- ======== PUBLISH PANEL (WebAR Links erzeugen) ======== -->
+<style id="publish-panel-style">
+  #pub-toggle{position:fixed;right:16px;bottom:16px;z-index:99998;background:#1f2a44;color:#fff;
+    border:1px solid #2a3347;border-radius:12px;padding:10px 14px;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+  #pub-panel{position:fixed;right:16px;bottom:66px;z-index:99999;width:360px;max-width:92vw;background:#0b1323f2;color:#e9ecf5;
+    border:1px solid #2a3347;border-radius:14px;box-shadow:0 20px 48px rgba(0,0,0,.35);display:none}
+  #pub-panel header{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #24314a}
+  #pub-panel header b{font:600 14px/1.3 system-ui,Segoe UI,Arial}
+  #pub-panel .body{padding:10px 12px;display:grid;gap:10px}
+  #pub-panel label{display:flex;flex-direction:column;gap:4px;font-size:12px;opacity:.95}
+  #pub-panel input[type="text"], #pub-panel input[type="number"]{background:#0e1628;border:1px solid #27334b;color:#e9ecf5;
+    border-radius:8px;padding:8px}
+  #pub-panel .row{display:flex;gap:8px;align-items:center}
+  #pub-panel .row > *{flex:1}
+  #pub-panel button{background:#223049;border:1px solid #2a3347;color:#e9ecf5;border-radius:10px;padding:8px 10px;cursor:pointer}
+  #pub-panel .muted{opacity:.8;font-size:12px}
+  #pub-qr{display:block;margin:6px auto 0 auto; background:#fff; border-radius:8px; max-width:100%}
+  #pub-link{width:100%}
+</style>
 
-    // UI
-    const toggle = $("#pub-toggle");
-    const panel = $("#pub-panel");
-    on(toggle, 'click', ()=> { panel.style.display = (panel.style.display==='none'||!panel.style.display) ? 'block' : 'none'; });
-    on($("#pub-close"), 'click', ()=> { panel.style.display='none'; });
+<button id="pub-toggle" title="Publish (Surface/Image AR)">Publish</button>
+<aside id="pub-panel" role="dialog" aria-modal="false" aria-label="Publish">
+  <header>
+    <b>Publish – WebAR Link</b>
+    <div style="flex:1"></div>
+    <button id="pub-close" title="Schließen" style="padding:6px 8px;border-radius:8px">✕</button>
+  </header>
+  <div class="body">
+    <label>Viewer URL (HTTPS empfohlen)
+      <input id="pub-viewer-url" type="text" value="./viewer.html" placeholder="./viewer.html">
+    </label>
 
-    on($("#pub-surface"), 'click', async ()=>{
-      const out = $("#pub-link");
-      try{
-        const link = await makeSurfaceARLink();
-        out.value = link;
-        drawQR(link);
-      }catch(e){ out.value = e.message; }
+    <div class="row">
+      <button id="pub-surface">Surface‑AR Link</button>
+      <button id="pub-image">Image‑AR Link</button>
+    </div>
+
+    <div class="row">
+      <input id="pub-image-file" type="file" accept="image/*">
+      <label>Bildbreite (m)
+        <input id="pub-image-width" type="number" step="0.01" min="0.05" value="0.20">
+      </label>
+    </div>
+
+    <label>Link
+      <input id="pub-link" type="text" readonly placeholder="Hier erscheint der Link…">
+    </label>
+    <canvas id="pub-qr" width="0" height="0"></canvas>
+    <div class="muted">Scanne den QR-Code oder kopiere den Link. Für AR ist HTTPS erforderlich.</div>
+  </div>
+</aside>
+
+<script id="publish-panel-logic">
+(function(){
+  // Avoid double-inject
+  if (window.__publishPanelInit) return;
+  window.__publishPanelInit = true;
+
+  const $ = (s)=> document.querySelector(s);
+  const on = (el, ev, fn)=> el && el.addEventListener(ev, fn);
+  function toastSafe(msg){ try{ if(typeof toast==='function') toast(msg); }catch(e){} }
+
+  // QR lib on demand (small)
+  const QR_URL = "https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js";
+  function ensureQRLib(){
+    return new Promise((resolve)=>{
+      if (window.QRCode) return resolve();
+      const s = document.createElement('script');
+      s.src = QR_URL; s.async = true;
+      s.onload = ()=> resolve();
+      s.onerror = ()=> resolve(); // continue even if failed
+      document.head.appendChild(s);
     });
+  }
+  async function drawQR(text){
+    await ensureQRLib();
+    const cnv = $("#pub-qr");
+    if(!window.QRCode || !cnv){ cnv.hidden=true; return; }
+    try{
+      const opts = { errorCorrectionLevel:'L', width: 280, margin:1, color:{ dark:"#000000", light:"#ffffff" } };
+      const dataUrl = await window.QRCode.toDataURL(text, opts);
+      const img = new Image();
+      img.onload = ()=>{
+        cnv.width = img.width; cnv.height = img.height;
+        const ctx = cnv.getContext('2d');
+        ctx.clearRect(0,0,cnv.width,cnv.height);
+        ctx.drawImage(img, 0, 0);
+        cnv.hidden = false;
+      };
+      img.src = dataUrl;
+    }catch(e){ cnv.hidden=true; }
+  }
 
-    on($("#pub-image"), 'click', async ()=>{
-      const out = $("#pub-link");
-      try{
-        const file = $("#pub-image-file")?.files?.[0];
-        const width = $("#pub-image-width")?.value || '0.2';
-        const link = await makeImageARLink(file, width);
-        out.value = link;
-        drawQR(link);
-      }catch(e){ out.value = e.message; }
-    });
+  function encodeHash(obj){
+    const json = JSON.stringify(obj);
+    return '#' + btoa(unescape(encodeURIComponent(json)));
+  }
 
-    // Close on Escape
-    window.addEventListener('keydown', (e)=>{
-      if(e.key==='Escape' && panel.style.display==='block'){ panel.style.display='none'; }
-    }, true);
-  })();
-  </script>
+  // Fallback helpers if host editor hasn't defined them (keine Kollisionen)
+  window.fileToBase64 = window.fileToBase64 || (file => new Promise((res,rej)=>{
+    const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file);
+  }));
+  window.snapshotTransform = window.snapshotTransform || (group => ({
+    position:[group.position.x, group.position.y, group.position.z],
+    rotationDeg:[group.rotation.x*180/Math.PI, group.rotation.y*180/Math.PI, group.rotation.z*180/Math.PI],
+    scale: group.scale.x
+  }));
+
+  async function buildScenePayloadFromSelection(){
+    if(!window.state || !Array.isArray(state.objects)) throw new Error('Kein Projektspeicher gefunden');
+    const sid = state.selectedId;
+    if(!sid) throw new Error('Kein Objekt ausgewählt');
+    const rec = state.objects.find(o=>o.id===sid);
+    if(!rec || !rec.group) throw new Error('Ungültige Auswahl');
+
+    let src = rec.url || rec.src || null;
+    if(!src && rec.file && typeof fileToBase64==='function'){
+      // Nur zum Testen: inline Data URL (in Produktion lieber eine URL verwenden)
+      src = await fileToBase64(rec.file);
+    }
+    if(!src) throw new Error('Keine GLB/GLTF-Quelle beim Objekt gefunden');
+
+    const t = (typeof snapshotTransform==='function') ? snapshotTransform(rec.group) : {
+      position:[rec.group.position.x, rec.group.position.y, rec.group.position.z],
+      rotationDeg:[rec.group.rotation.x*180/Math.PI, rec.group.rotation.y*180/Math.PI, rec.group.rotation.z*180/Math.PI],
+      scale: rec.group.scale.x
+    };
+    const animIndex = (typeof rec.animIndex==='number') ? rec.animIndex : 0;
+    const audio = rec.audioURL || null;
+
+    return { src, scale: t.scale, rotationDeg: t.rotationDeg, position: t.position, animIndex, audio };
+  }
+
+  function baseViewerURL(){
+    return document.getElementById('pub-viewer-url')?.value?.trim() || "./viewer.html";
+  }
+
+  async function makeSurfaceARLink(){
+    const payload = await buildScenePayloadFromSelection();
+    payload.mode = 'surface';
+    return baseViewerURL() + encodeHash(payload);
+  }
+
+  async function makeImageARLink(file, widthMeters){
+    if(!file) throw new Error('Kein Trigger-Bild gewählt');
+    if(typeof fileToBase64!=='function') throw new Error('fileToBase64 fehlt im Editor');
+    const imgData = await fileToBase64(file);
+    const payload = await buildScenePayloadFromSelection();
+    payload.mode = 'image';
+    payload.image = imgData;
+    payload.imageWidthMeters = Number(widthMeters)||0.2;
+    return baseViewerURL() + encodeHash(payload);
+  }
+
+  // UI wiring
+  const toggle = document.getElementById('pub-toggle');
+  const panel = document.getElementById('pub-panel');
+  if(toggle && panel){
+    toggle.addEventListener('click', ()=> { panel.style.display = (panel.style.display==='none'||!panel.style.display) ? 'block' : 'none'; });
+  }
+  const closeBtn = document.getElementById('pub-close');
+  closeBtn && closeBtn.addEventListener('click', ()=> panel.style.display='none');
+
+  const out = document.getElementById('pub-link');
+  const btnSurface = document.getElementById('pub-surface');
+  const btnImage = document.getElementById('pub-image');
+  btnSurface && btnSurface.addEventListener('click', async ()=>{
+    try{
+      const link = await makeSurfaceARLink();
+      out.value = link; drawQR(link); toastSafe('Surface‑AR Link erstellt');
+    }catch(e){ out.value = e.message; }
+  });
+  btnImage && btnImage.addEventListener('click', async ()=>{
+    try{
+      const file = document.getElementById('pub-image-file')?.files?.[0];
+      const width = document.getElementById('pub-image-width')?.value || '0.2';
+      const link = await makeImageARLink(file, width);
+      out.value = link; drawQR(link); toastSafe('Image‑AR Link erstellt');
+    }catch(e){ out.value = e.message; }
+  });
+
+  // Close on Escape
+  window.addEventListener('keydown', (e)=>{
+    if(e.key==='Escape' && panel.style.display==='block'){ panel.style.display='none'; }
+  }, true);
+})();
+</script>
+<!-- ======== /PUBLISH PANEL ======== -->
+
 </body>
 </html>
