@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>AR Scene Editor (MVP) – area</title>
+
+<!-- Preview via model-viewer -->
+<script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+<!-- QR -->
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+
+<style>
+  :root{color-scheme:dark light}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:#0b0b0b;color:#eef2ff}
+  a{color:#9ad}
+  .page{display:grid;grid-template-columns: 420px 1fr;gap:16px;min-height:100dvh}
+  .pane{padding:16px}
+  .card{background:#111;border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:14px;margin-bottom:12px}
+  h1{margin:6px 0 14px;font-size:18px}
+  h2{margin:0 0 10px;font-size:14px;opacity:.9}
+  label{display:block;font-size:12px;opacity:.9;margin-top:8px}
+  input,select,textarea,button{font:inherit}
+  input[type="text"], input[type="url"], textarea, select {
+    width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.2);
+    background:#0f1220;color:#fff
+  }
+  .row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  button{padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:#1b1f32;color:#fff;cursor:pointer}
+  button.primary{background:#2b3569;border-color:#4453a8}
+  .muted{opacity:.8;font-size:12px}
+  .warn{color:#ffcc66}
+  /* Preview */
+  .previewWrap{position:relative;height:100%;min-height:60dvh}
+  model-viewer#prev{
+    position:sticky;top:16px;width:100%;height:calc(100dvh - 32px);
+    background:#000;border-radius:16px;overflow:hidden;--poster-color:transparent
+  }
+  #links .linklist a{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #qr{margin-top:8px;background:#fff;border-radius:12px;display:inline-grid;place-items:center;padding:8px}
+  .badge{display:inline-block;padding:2px 8px;border:1px solid rgba(255,255,255,.2);border-radius:999px;font-size:11px;opacity:.9}
+  .modeRadios{display:flex;gap:10px;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="page">
+  <!-- LEFT: Form -->
+  <div class="pane">
+    <h1>AR Scene Editor (MVP)</h1>
+
+    <div class="card">
+      <h2>Modus</h2>
+      <div class="modeRadios">
+        <label><input type="radio" name="mode" value="image" checked> Image-Tracking</label>
+        <label><input type="radio" name="mode" value="surface"> Surface-AR</label>
+      </div>
+      <p class="muted">Beim Surface-Modus wird der <code>target</code>-Block ignoriert.</p>
+    </div>
+
+    <div class="card" id="targetCard">
+      <h2>Target (nur Image-Modus)</h2>
+      <label>Preview-Bild URL (PNG/JPG)</label>
+      <input id="targetPreview" type="url" placeholder="/area/assets/targets/target.png">
+      <label>.mind Datei URL</label>
+      <input id="targetMind" type="url" placeholder="/area/assets/targets/target.mind">
+      <p class="muted">Kompiliere mit dem MindAR Image Targets Compiler und lege <code>target.mind</code> + <code>target.png</code> nebeneinander ab.</p>
+    </div>
+
+    <div class="card">
+      <h2>3D-Modell</h2>
+      <label>GLB URL</label>
+      <input id="modelUrl" type="url" placeholder="https://…/modell.glb" value="https://modelviewer.dev/shared-assets/models/Astronaut.glb">
+      <div class="row2">
+        <div>
+          <label>USDZ URL (iOS – optional)</label>
+          <input id="usdzUrl" type="url" placeholder="https://…/modell.usdz">
+        </div>
+        <div>
+          <label>Animation</label>
+          <select id="animName">
+            <option value="*">alle</option>
+            <option value="none">keine</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div><label>Scale X</label><input id="sx" type="text" value="0.6"></div>
+        <div><label>Scale Y</label><input id="sy" type="text" value="0.6"></div>
+        <div><label>Scale Z</label><input id="sz" type="text" value="0.6"></div>
+      </div>
+      <div class="row">
+        <div><label>Rot X (°)</label><input id="rx" type="text" value="0"></div>
+        <div><label>Rot Y (°)</label><input id="ry" type="text" value="0"></div>
+        <div><label>Rot Z (°)</label><input id="rz" type="text" value="0"></div>
+      </div>
+      <div class="row" id="posRow">
+        <div><label>Pos X</label><input id="px" type="text" value="0"></div>
+        <div><label>Pos Y</label><input id="py" type="text" value="0"></div>
+        <div><label>Pos Z</label><input id="pz" type="text" value="0.05"></div>
+      </div>
+      <div class="actions">
+        <button id="btnPreview" class="primary">Vorschau aktualisieren</button>
+      </div>
+      <p class="muted">Tipp: Die Position wird nur im Image-Modus verwendet (Modell sitzt auf dem Target-Bild).</p>
+    </div>
+
+    <div class="card">
+      <h2>Licht</h2>
+      <div class="row2">
+        <div><label>Hemisphere intensity</label><input id="hemi" type="text" value="1.2"></div>
+        <div><label>Directional intensity</label><input id="dirI" type="text" value="1.0"></div>
+      </div>
+      <div class="row">
+        <div><label>Dir X</label><input id="dx" type="text" value="0"></div>
+        <div><label>Dir Y</label><input id="dy" type="text" value="6"></div>
+        <div><label>Dir Z</label><input id="dz" type="text" value="0"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Meta</h2>
+      <label>Titel</label>
+      <input id="title" type="text" value="AR-Erlebnis starten">
+      <label>Hinweise (eine pro Zeile)</label>
+      <textarea id="tips" rows="3">Achten Sie auf Ihre Umgebung.</textarea>
+    </div>
+
+    <div class="card" id="links">
+      <h2>Veröffentlichen & Links</h2>
+      <label>Slug (Ordnername unter <code>scenes/published/&lt;slug&gt;</code>)</label>
+      <input id="slug" type="text" placeholder="demo2">
+      <div class="actions">
+        <button id="btnExport" class="primary">scene.json exportieren</button>
+        <button id="btnMakeLinks">Viewer-Links erzeugen</button>
+      </div>
+      <div class="linklist" id="linkList"></div>
+      <div id="qr"></div>
+      <p class="muted">Ohne Backend: lade die exportierte <code>scene.json</code> manuell in <code>scenes/published/&lt;slug&gt;/</code> hoch.  
+      Die Buttons oben erzeugen Links mit jsDelivr auf den <span class="badge">@scenes</span>-Branch.</p>
+    </div>
+
+    <p class="muted">Nächste Ausbaustufe: „Publish“ per GitHub-Action / OAuth (kein manueller Upload nötig).</p>
+  </div>
+
+  <!-- RIGHT: Preview -->
+  <div class="pane previewWrap">
+    <model-viewer id="prev"
+      src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
+      camera-controls autoplay
+      environment-image="https://modelviewer.dev/shared-assets/environments/neutral.hdr"
+      exposure="1" shadow-intensity="1"
+      interaction-prompt="none"
+      camera-orbit="0deg 65deg auto"
+      camera-target="auto"
+      field-of-view="30deg">
+    </model-viewer>
+  </div>
+</div>
+
+<script>
+const $ = s=>document.querySelector(s);
+
+/* ---------- Form helpers ---------- */
+function val(id){ return $(id).value.trim(); }
+function num(v, fallback=0){ const n = Number(v); return Number.isFinite(n)? n : fallback; }
+
+/* ---------- Build scene.json from form ---------- */
+function buildScene(){
+  const mode = [...document.querySelectorAll('input[name="mode"]')].find(r=>r.checked).value;
+  const tips = $('#tips').value.split('\n').map(s=>s.trim()).filter(Boolean);
+
+  const scene = {
+    meta: { version: "1.0", mode, title: val('#title') || "AR-Erlebnis", tips },
+    target: {
+      mindUrl: val('#targetMind') || undefined,
+      previewUrl: val('#targetPreview') || undefined
+    },
+    model: {
+      url: val('#modelUrl'),
+      usdzUrl: val('#usdzUrl') || undefined,
+      position: [ num(val('#px')), num(val('#py')), num(val('#pz')) ],
+      rotation: [ num(val('#rx')), num(val('#ry')), num(val('#rz')) ],
+      scale:    [ num(val('#sx'),1), num(val('#sy'),1), num(val('#sz'),1) ],
+      animation: $('#animName').value
+    },
+    lighting: {
+      hemi: num(val('#hemi'),1.0),
+      dir: { intensity: num(val('#dirI'),1.0), pos: [ num(val('#dx')), num(val('#dy')), num(val('#dz')) ] }
+    },
+    audio: { url: null, loop:true, volume:0.8, autoplayOnTarget:false }
+  };
+
+  if (mode !== 'image') delete scene.target; // sauber halten
+  return scene;
+}
+
+/* ---------- Preview (model-viewer) ---------- */
+async function updatePreview(){
+  const scene = buildScene();
+  const mv = $('#prev');
+  mv.src = scene.model.url || mv.src;
+  mv.cameraOrbit = '0deg 65deg auto';
+  mv.cameraTarget = 'auto';
+  mv.fieldOfView = '30deg';
+  // Animation setzen (falls vorhanden)
+  mv.addEventListener('load', () => {
+    try{
+      const names = mv.availableAnimations || [];
+      const sel = $('#animName').value;
+      if (sel === 'none') { mv.animationName = null; mv.autoplay = false; }
+      else if (sel === '*' && names.length){ mv.animationName = names[0]; mv.autoplay = true; }
+      else if (sel && sel !== '*') { mv.animationName = sel; mv.autoplay = true; }
+    }catch{}
+    mv.jumpCameraToGoal();
+  }, {once:true});
+}
+
+/* ---------- Fill animation dropdown from GLB ---------- */
+async function refreshAnimationList(){
+  const mv = $('#prev');
+  const url = val('#modelUrl');
+  if (!url) return;
+  // Lade kurz ins versteckte model-viewer (oder nimm das vorhandene)
+  mv.src = url;
+  mv.addEventListener('load', ()=>{
+    const box = $('#animName');
+    const names = mv.availableAnimations || [];
+    const current = box.value;
+    box.innerHTML = '';
+    if (names.length===0){
+      box.insertAdjacentHTML('beforeend','<option value="none">keine</option>');
+    }else{
+      box.insertAdjacentHTML('beforeend','<option value="*">alle</option>');
+      names.forEach(n=>box.insertAdjacentHTML('beforeend', `<option value="${n}">${n}</option>`));
+    }
+    // versuche, bisherigen Wert beizubehalten
+    if ([...box.options].some(o=>o.value===current)) box.value = current;
+  }, {once:true});
+}
+
+/* ---------- Export JSON ---------- */
+function downloadJSON(){
+  const scene = buildScene();
+  const blob = new Blob([JSON.stringify(scene,null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.download = 'scene.json';
+  a.href = URL.createObjectURL(blob);
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* ---------- Links + QR ---------- */
+function makeLinks(){
+  const slug = val('#slug');
+  const list = $('#linkList');
+  const qrBox = $('#qr');
+  list.innerHTML = ''; qrBox.innerHTML='';
+
+  if (!slug){ list.innerHTML = '<p class="warn">Bitte Slug eingeben.</p>'; return; }
+
+  const sceneUrl = `https://cdn.jsdelivr.net/gh/krischihh/area@scenes/scenes/published/${encodeURIComponent(slug)}/scene.json`;
+  const enc = encodeURIComponent(sceneUrl);
+  const base = 'https://krischihh.github.io/area';
+
+  const urls = {
+    'Image-Viewer':   `${base}/image-ar/viewer.html?scene=${enc}`,
+    'Surface (WebXR)':`${base}/surface-ar/webxr.html?scene=${enc}`,
+    'Surface (Native)':`${base}/surface-ar/index.html?scene=${enc}`
+  };
+
+  Object.entries(urls).forEach(([label,href])=>{
+    const a = document.createElement('a'); a.href = href; a.target = '_blank'; a.rel='noopener';
+    a.textContent = `${label}: ${href}`;
+    list.appendChild(a);
+  });
+
+  // QR für den Image-Viewer (als „klassischer“ Einstieg)
+  const canvas = document.createElement('canvas');
+  canvas.width = 840; canvas.height = 840;
+  QRCode.toCanvas(canvas, urls['Image-Viewer'], { errorCorrectionLevel:'M', margin:1, scale:8 }, ()=>{
+    const vis = document.createElement('canvas'); vis.width=240; vis.height=240;
+    const ctx = vis.getContext('2d'); ctx.imageSmoothingEnabled=false;
+    ctx.drawImage(canvas,0,0,vis.width,vis.height);
+    qrBox.appendChild(vis);
+  });
+}
+
+/* ---------- UI wiring ---------- */
+$('#btnPreview').addEventListener('click', ()=>{ refreshAnimationList(); updatePreview(); });
+$('#modelUrl').addEventListener('change', refreshAnimationList);
+$('#btnExport').addEventListener('click', downloadJSON);
+$('#btnMakeLinks').addEventListener('click', makeLinks);
+
+// Modus: Position-Row nur im Image-Modus zeigen
+document.querySelectorAll('input[name="mode"]').forEach(r=>r.addEventListener('change', (e)=>{
+  $('#targetCard').style.display = (e.target.value==='image') ? '' : 'none';
+  $('#posRow').style.display     = (e.target.value==='image') ? '' : 'none';
+}));
+
+// Initial
+refreshAnimationList();
+updatePreview();
+</script>
+</body>
+</html>
