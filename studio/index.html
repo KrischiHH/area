@@ -3,81 +3,108 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>AR Scene Editor (MVP) – area</title>
+<title>AR Studio (MVP) – Projekte, Import, Gizmo</title>
 
-<!-- Preview via model-viewer -->
-<script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
-<!-- QR -->
+<!-- THREE + Addons -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<!-- Non-module deps -->
 <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
 <style>
   :root{color-scheme:dark light}
   *{box-sizing:border-box}
-  html,body{margin:0;height:100%;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:#0b0b0b;color:#eef2ff}
-  a{color:#9ad}
-  .page{display:grid;grid-template-columns: 420px 1fr;gap:16px;min-height:100dvh}
-  .pane{padding:16px}
-  .card{background:#111;border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:14px;margin-bottom:12px}
-  h1{margin:6px 0 14px;font-size:18px}
-  h2{margin:0 0 10px;font-size:14px;opacity:.9}
-  label{display:block;font-size:12px;opacity:.9;margin-top:8px}
+  html,body{margin:0;height:100%;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:#0b0b0b;color:#eaf0ff}
+  a{color:#a9c7ff}
+  .bar{display:flex;gap:8px;align-items:center;padding:10px 12px;background:#0f1220;border-bottom:1px solid rgba(255,255,255,.08);position:sticky;top:0;z-index:10}
+  .bar .title{font-weight:600}
+  .bar button,.bar select{padding:8px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.14);background:#1a1f33;color:#fff}
+  .layout{display:grid;grid-template-columns: minmax(340px,420px) 1fr;gap:14px;min-height:calc(100dvh - 52px);padding:12px}
+  .card{background:#11182a;border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:12px;margin-bottom:12px}
+  h2{margin:4px 0 10px;font-size:14px;opacity:.9}
+  label{display:block;font-size:12px;opacity:.85;margin-top:8px}
   input,select,textarea,button{font:inherit}
-  input[type="text"], input[type="url"], textarea, select {
-    width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.2);
-    background:#0f1220;color:#fff
+  input[type="text"],input[type="url"],textarea,select{
+    width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:#0f1324;color:#fff
   }
+  input[type="file"]{width:100%;padding:8px;border-radius:10px;border:1px dashed rgba(255,255,255,.25);background:#0f1324;color:#9fb3ff}
   .row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-  button{padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:#1b1f32;color:#fff;cursor:pointer}
-  button.primary{background:#2b3569;border-color:#4453a8}
+  button{padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:#1a1f33;color:#fff;cursor:pointer}
+  button.primary{background:#2a3569;border-color:#4050a8}
   .muted{opacity:.8;font-size:12px}
-  .warn{color:#ffcc66}
-  /* Preview */
-  .previewWrap{position:relative;height:100%;min-height:60dvh}
-  model-viewer#prev{
-    position:sticky;top:16px;width:100%;height:calc(100dvh - 32px);
-    background:#000;border-radius:16px;overflow:hidden;--poster-color:transparent
-  }
-  #links .linklist a{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .warn{color:#ffd27a}
+  /* Viewport */
+  .viewport{position:relative;background:#000;border-radius:14px;overflow:hidden;height:calc(100dvh - 72px)}
+  canvas.viewer{display:block;width:100%;height:100%}
+  .vpHud{position:absolute;left:8px;top:8px;display:flex;gap:6px;z-index:2}
+  .vpHud .btn{padding:6px 10px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(17,20,40,.8);color:#fff}
   #qr{margin-top:8px;background:#fff;border-radius:12px;display:inline-grid;place-items:center;padding:8px}
-  .badge{display:inline-block;padding:2px 8px;border:1px solid rgba(255,255,255,.2);border-radius:999px;font-size:11px;opacity:.9}
-  .modeRadios{display:flex;gap:10px;margin-top:6px}
+  .switchRow{display:flex;gap:10px;align-items:center;margin-top:6px}
+  .drop{padding:10px;border:1px dashed rgba(255,255,255,.25);border-radius:12px;background:#0f1324;text-align:center}
+  .drop.drag{background:#15204a}
 </style>
 </head>
 <body>
-<div class="page">
-  <!-- LEFT: Form -->
-  <div class="pane">
-    <h1>AR Scene Editor (MVP)</h1>
 
+<!-- PROJECT BAR -->
+<div class="bar">
+  <span class="title">AR Studio</span>
+  <button id="newProj">Neu</button>
+  <button id="saveProj" class="primary">Speichern</button>
+  <button id="saveAsProj">Speichern unter…</button>
+  <select id="openList"><option value="">Projekt öffnen…</option></select>
+  <button id="delProj">Löschen</button>
+  <div style="margin-left:auto;opacity:.8" id="projInfo">–</div>
+</div>
+
+<div class="layout">
+  <!-- LEFT: Inspector -->
+  <div>
     <div class="card">
-      <h2>Modus</h2>
-      <div class="modeRadios">
+      <h2>Allgemein</h2>
+      <label>Projektname</label>
+      <input id="projName" type="text" placeholder="Mein Projekt">
+      <div class="switchRow" style="margin-top:10px">
+        <strong>Modus:</strong>
         <label><input type="radio" name="mode" value="image" checked> Image-Tracking</label>
         <label><input type="radio" name="mode" value="surface"> Surface-AR</label>
       </div>
-      <p class="muted">Beim Surface-Modus wird der <code>target</code>-Block ignoriert.</p>
-    </div>
-
-    <div class="card" id="targetCard">
-      <h2>Target (nur Image-Modus)</h2>
-      <label>Preview-Bild URL (PNG/JPG)</label>
-      <input id="targetPreview" type="url" placeholder="/area/assets/targets/target.png">
-      <label>.mind Datei URL</label>
-      <input id="targetMind" type="url" placeholder="/area/assets/targets/target.mind">
-      <p class="muted">Kompiliere mit dem MindAR Image Targets Compiler und lege <code>target.mind</code> + <code>target.png</code> nebeneinander ab.</p>
+      <p class="muted">Im Surface-Modus wird der Target-Block ignoriert.</p>
     </div>
 
     <div class="card">
-      <h2>3D-Modell</h2>
-      <label>GLB URL</label>
-      <input id="modelUrl" type="url" placeholder="https://…/modell.glb" value="https://modelviewer.dev/shared-assets/models/Astronaut.glb">
-      <div class="row2">
-        <div>
-          <label>USDZ URL (iOS – optional)</label>
-          <input id="usdzUrl" type="url" placeholder="https://…/modell.usdz">
-        </div>
+      <h2>Modell</h2>
+      <div class="switchRow">
+        <strong>Quelle:</strong>
+        <label><input type="radio" name="mSrc" value="file" checked> Datei</label>
+        <label><input type="radio" name="mSrc" value="url"> URL</label>
+      </div>
+
+      <div id="mFileBox">
+        <label>GLB Datei</label>
+        <div class="drop" id="dropGlb">Datei hierher ziehen oder wählen</div>
+        <input id="modelFile" type="file" accept=".glb" style="margin-top:6px">
+        <label>USDZ Datei (optional, iOS)</label>
+        <input id="usdzFile" type="file" accept=".usdz">
+      </div>
+
+      <div id="mUrlBox" style="display:none">
+        <label>GLB URL</label>
+        <input id="modelUrl" type="url" placeholder="https://…/model.glb">
+        <label>USDZ URL (optional, iOS)</label>
+        <input id="usdzUrl" type="url" placeholder="https://…/model.usdz">
+      </div>
+
+      <div class="row2" style="margin-top:8px">
         <div>
           <label>Animation</label>
           <select id="animName">
@@ -85,33 +112,57 @@
             <option value="none">keine</option>
           </select>
         </div>
+        <div class="muted" style="align-self:end;text-align:right">Tasten: W/E/R = Move/Rotate/Scale</div>
       </div>
+    </div>
+
+    <div class="card" id="targetCard">
+      <h2>Target (nur Image-Modus)</h2>
+      <div class="switchRow">
+        <strong>Quelle:</strong>
+        <label><input type="radio" name="tSrc" value="file" checked> Dateien</label>
+        <label><input type="radio" name="tSrc" value="url"> URLs</label>
+      </div>
+
+      <div id="tFileBox">
+        <label>.mind Datei</label>
+        <input id="targetMindFile" type="file" accept=".mind">
+        <label>Preview-Bild (PNG/JPG)</label>
+        <input id="targetPreviewFile" type="file" accept=".png,.jpg,.jpeg">
+      </div>
+
+      <div id="tUrlBox" style="display:none">
+        <label>.mind URL</label>
+        <input id="targetMindUrl" type="url" placeholder="/area/assets/targets/target.mind">
+        <label>Preview URL</label>
+        <input id="targetPreviewUrl" type="url" placeholder="/area/assets/targets/target.png">
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Transform</h2>
       <div class="row">
-        <div><label>Scale X</label><input id="sx" type="text" value="0.6"></div>
-        <div><label>Scale Y</label><input id="sy" type="text" value="0.6"></div>
-        <div><label>Scale Z</label><input id="sz" type="text" value="0.6"></div>
+        <div><label>Pos X</label><input id="px" type="text" value="0"></div>
+        <div><label>Pos Y</label><input id="py" type="text" value="0"></div>
+        <div><label>Pos Z</label><input id="pz" type="text" value="0.05"></div>
       </div>
       <div class="row">
         <div><label>Rot X (°)</label><input id="rx" type="text" value="0"></div>
         <div><label>Rot Y (°)</label><input id="ry" type="text" value="0"></div>
         <div><label>Rot Z (°)</label><input id="rz" type="text" value="0"></div>
       </div>
-      <div class="row" id="posRow">
-        <div><label>Pos X</label><input id="px" type="text" value="0"></div>
-        <div><label>Pos Y</label><input id="py" type="text" value="0"></div>
-        <div><label>Pos Z</label><input id="pz" type="text" value="0.05"></div>
+      <div class="row">
+        <div><label>Scale X</label><input id="sx" type="text" value="0.6"></div>
+        <div><label>Scale Y</label><input id="sy" type="text" value="0.6"></div>
+        <div><label>Scale Z</label><input id="sz" type="text" value="0.6"></div>
       </div>
-      <div class="actions">
-        <button id="btnPreview" class="primary">Vorschau aktualisieren</button>
-      </div>
-      <p class="muted">Tipp: Die Position wird nur im Image-Modus verwendet (Modell sitzt auf dem Target-Bild).</p>
     </div>
 
     <div class="card">
       <h2>Licht</h2>
       <div class="row2">
-        <div><label>Hemisphere intensity</label><input id="hemi" type="text" value="1.2"></div>
-        <div><label>Directional intensity</label><input id="dirI" type="text" value="1.0"></div>
+        <div><label>Hemisphere</label><input id="hemi" type="text" value="1.2"></div>
+        <div><label>Directional</label><input id="dirI" type="text" value="1.0"></div>
       </div>
       <div class="row">
         <div><label>Dir X</label><input id="dx" type="text" value="0"></div>
@@ -128,181 +179,468 @@
       <textarea id="tips" rows="3">Achten Sie auf Ihre Umgebung.</textarea>
     </div>
 
-    <div class="card" id="links">
-      <h2>Veröffentlichen & Links</h2>
-      <label>Slug (Ordnername unter <code>scenes/published/&lt;slug&gt;</code>)</label>
-      <input id="slug" type="text" placeholder="demo2">
+    <div class="card">
+      <h2>Export & Links</h2>
+      <label>Slug (Ordner unter <code>scenes/published/&lt;slug&gt;</code>)</label>
+      <input id="slug" type="text" placeholder="demo-project">
       <div class="actions">
-        <button id="btnExport" class="primary">scene.json exportieren</button>
-        <button id="btnMakeLinks">Viewer-Links erzeugen</button>
+        <button id="btnZip" class="primary">ZIP: scene.json + Dateien</button>
+        <button id="btnLinks">Viewer-Links + QR</button>
       </div>
-      <div class="linklist" id="linkList"></div>
+      <div id="links"></div>
       <div id="qr"></div>
-      <p class="muted">Ohne Backend: lade die exportierte <code>scene.json</code> manuell in <code>scenes/published/&lt;slug&gt;/</code> hoch.  
-      Die Buttons oben erzeugen Links mit jsDelivr auf den <span class="badge">@scenes</span>-Branch.</p>
+      <p class="muted">ZIP entpacken und Inhalt nach <code>scenes/published/&lt;slug&gt;/</code> committen (Branch <b>@scenes</b>).</p>
     </div>
-
-    <p class="muted">Nächste Ausbaustufe: „Publish“ per GitHub-Action / OAuth (kein manueller Upload nötig).</p>
   </div>
 
-  <!-- RIGHT: Preview -->
-  <div class="pane previewWrap">
-    <model-viewer id="prev"
-      src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
-      camera-controls autoplay
-      environment-image="https://modelviewer.dev/shared-assets/environments/neutral.hdr"
-      exposure="1" shadow-intensity="1"
-      interaction-prompt="none"
-      camera-orbit="0deg 65deg auto"
-      camera-target="auto"
-      field-of-view="30deg">
-    </model-viewer>
+  <!-- RIGHT: Viewport -->
+  <div class="viewport">
+    <div class="vpHud">
+      <button class="btn" id="modeT">W (Move)</button>
+      <button class="btn" id="modeR">E (Rotate)</button>
+      <button class="btn" id="modeS">R (Scale)</button>
+      <button class="btn" id="resetCam">Kamera reset</button>
+    </div>
+    <canvas id="viewer" class="viewer"></canvas>
   </div>
 </div>
 
-<script>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {TransformControls} from 'three/addons/controls/TransformControls.js';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+// IndexedDB helper (small wrapper)
+import {get,set,del,keys} from 'https://cdn.jsdelivr.net/npm/idb-keyval@6/dist/esm/index.js';
+
 const $ = s=>document.querySelector(s);
+const num = (v,f=0)=>{ const n=Number(v); return Number.isFinite(n)?n:f; };
+const uuid = ()=>crypto.randomUUID?.():Math.random().toString(36).slice(2);
 
-/* ---------- Form helpers ---------- */
-function val(id){ return $(id).value.trim(); }
-function num(v, fallback=0){ const n = Number(v); return Number.isFinite(n)? n : fallback; }
+// ---------- Project state ----------
+let project = null;         // current project JSON
+let blobs = {};             // {fileId: Blob}
+let objectURL = {};         // {fileId: blobURL}
+let modelObj = null, mixer=null, gltfAnims=[];
+const DB_PREFIX = 'area-studio:';
+const PROJ_LIST_KEY = DB_PREFIX+'projects';
 
-/* ---------- Build scene.json from form ---------- */
-function buildScene(){
-  const mode = [...document.querySelectorAll('input[name="mode"]')].find(r=>r.checked).value;
-  const tips = $('#tips').value.split('\n').map(s=>s.trim()).filter(Boolean);
-
-  const scene = {
-    meta: { version: "1.0", mode, title: val('#title') || "AR-Erlebnis", tips },
-    target: {
-      mindUrl: val('#targetMind') || undefined,
-      previewUrl: val('#targetPreview') || undefined
-    },
-    model: {
-      url: val('#modelUrl'),
-      usdzUrl: val('#usdzUrl') || undefined,
-      position: [ num(val('#px')), num(val('#py')), num(val('#pz')) ],
-      rotation: [ num(val('#rx')), num(val('#ry')), num(val('#rz')) ],
-      scale:    [ num(val('#sx'),1), num(val('#sy'),1), num(val('#sz'),1) ],
-      animation: $('#animName').value
-    },
-    lighting: {
-      hemi: num(val('#hemi'),1.0),
-      dir: { intensity: num(val('#dirI'),1.0), pos: [ num(val('#dx')), num(val('#dy')), num(val('#dz')) ] }
-    },
-    audio: { url: null, loop:true, volume:0.8, autoplayOnTarget:false }
+// Default project
+function defaultProject(){
+  return {
+    id: uuid(),
+    name: 'Unbenannt',
+    meta: { title:'AR-Erlebnis starten', tips:['Achten Sie auf Ihre Umgebung.'] },
+    mode: 'image',
+    transform: { position:[0,0,0.05], rotation:[0,0,0], scale:[0.6,0.6,0.6] },
+    lighting: { hemi:1.2, dir:{ intensity:1.0, pos:[0,6,0] } },
+    model: { source:'file', fileId:null, fileName:'model.glb', usdzSource:'file', usdzFileId:null, usdzFileName:'model.usdz', url:'', usdzUrl:'', animation:'*' },
+    target: { mindSource:'file', mindFileId:null, mindName:'target.mind', mindUrl:'', previewSource:'file', previewFileId:null, previewName:'target.png', previewUrl:'' },
+    updatedAt: Date.now()
   };
+}
 
-  if (mode !== 'image') delete scene.target; // sauber halten
+// ---------- THREE Viewer ----------
+const canvas = $('#viewer');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:false});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+const camera = new THREE.PerspectiveCamera(60, 1, 0.01, 100);
+resetCamera();
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+const grid = new THREE.GridHelper(10, 20, 0x334455, 0x223344);
+grid.material.opacity = 0.35; grid.material.transparent = true;
+scene.add(grid);
+const axes = new THREE.AxesHelper(0.5); scene.add(axes);
+const hemi = new THREE.HemisphereLight(0xffffff, 0x222233, 1.2); scene.add(hemi);
+const dir  = new THREE.DirectionalLight(0xffffff, 1.0); dir.position.set(0,6,0); scene.add(dir);
+
+const tControls = new TransformControls(camera, renderer.domElement);
+tControls.addEventListener('dragging-changed', e=>controls.enabled=!e.value);
+tControls.addEventListener('objectChange', syncTransformFromObject);
+scene.add(tControls);
+
+function resetCamera(){
+  camera.position.set(1.6,1.2,2.2);
+  camera.lookAt(0,0,0);
+  camera.updateProjectionMatrix();
+}
+$('#resetCam').addEventListener('click', resetCamera);
+
+function resize(){
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (canvas.width !== w || canvas.height !== h){
+    renderer.setSize(w, h, false);
+    camera.aspect = w/h; camera.updateProjectionMatrix();
+  }
+}
+function animate(){
+  resize();
+  const dt = clock.getDelta();
+  if (mixer) mixer.update(dt);
+  controls.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+const clock = new THREE.Clock();
+animate();
+
+// ---------- Loaders ----------
+const loader = new GLTFLoader();
+
+async function getBlobURL(fileId){
+  if (!fileId) return '';
+  if (objectURL[fileId]) return objectURL[fileId];
+  const blob = blobs[fileId] || await get(DB_PREFIX+'file:'+fileId);
+  if (!blob) return '';
+  blobs[fileId] = blob;
+  const url = URL.createObjectURL(blob);
+  objectURL[fileId] = url;
+  return url;
+}
+
+async function loadModelForViewport(){
+  // clear old
+  if (modelObj){ tControls.detach(); scene.remove(modelObj); modelObj.traverse(o=>{ if (o.isMesh) o.geometry?.dispose(); }); modelObj=null; mixer=null; gltfAnims=[]; }
+  let src = '';
+  if (project.model.source==='file' && project.model.fileId){
+    src = await getBlobURL(project.model.fileId);
+  }else if (project.model.source==='url' && project.model.url){
+    src = project.model.url;
+  }else{
+    return;
+  }
+  loader.load(src, (gltf)=>{
+    modelObj = gltf.scene;
+    gltfAnims = gltf.animations||[];
+    applyTransformToObject();
+    scene.add(modelObj);
+    tControls.attach(modelObj);
+    refreshAnimDropdown();
+    if (gltfAnims.length && project.model.animation && project.model.animation!=='none'){
+      mixer = new THREE.AnimationMixer(modelObj);
+      if (project.model.animation==='*') gltfAnims.forEach(c=>mixer.clipAction(c).play());
+      else {
+        const clip = gltfAnims.find(c=>c.name===project.model.animation) || gltfAnims[0];
+        mixer.clipAction(clip).play();
+      }
+    }
+  }, undefined, (err)=>alert('GLB konnte nicht geladen werden: '+err.message));
+}
+
+function applyTransformToObject(){
+  if (!modelObj) return;
+  const t = project.transform;
+  modelObj.position.set(t.position[0], t.position[1], t.position[2]);
+  modelObj.rotation.set(THREE.MathUtils.degToRad(t.rotation[0]), THREE.MathUtils.degToRad(t.rotation[1]), THREE.MathUtils.degToRad(t.rotation[2]));
+  modelObj.scale.set(t.scale[0], t.scale[1], t.scale[2]);
+}
+function syncTransformFromObject(){
+  if (!modelObj) return;
+  const p = modelObj.position, r = modelObj.rotation, s = modelObj.scale;
+  project.transform.position = [p.x, p.y, p.z];
+  project.transform.rotation = [THREE.MathUtils.radToDeg(r.x), THREE.MathUtils.radToDeg(r.y), THREE.MathUtils.radToDeg(r.z)];
+  project.transform.scale    = [s.x, s.y, s.z];
+  updateTransformInputs();
+}
+
+function updateTransformInputs(){
+  const t = project.transform;
+  $('#px').value=t.position[0]; $('#py').value=t.position[1]; $('#pz').value=t.position[2];
+  $('#rx').value=t.rotation[0]; $('#ry').value=t.rotation[1]; $('#rz').value=t.rotation[2];
+  $('#sx').value=t.scale[0];    $('#sy').value=t.scale[1];    $('#sz').value=t.scale[2];
+}
+function readTransformFromInputs(){
+  const t = project.transform;
+  t.position=[num($('#px').value),num($('#py').value),num($('#pz').value)];
+  t.rotation=[num($('#rx').value),num($('#ry').value),num($('#rz').value)];
+  t.scale   =[num($('#sx').value,1),num($('#sy').value,1),num($('#sz').value,1)];
+  applyTransformToObject();
+}
+['#px','#py','#pz','#rx','#ry','#rz','#sx','#sy','#sz'].forEach(sel=>{
+  $(sel).addEventListener('change', readTransformFromInputs);
+});
+
+// Gizmo mode + keys
+function setGizmoMode(m){ tControls.setMode(m); }
+$('#modeT').addEventListener('click', ()=>setGizmoMode('translate'));
+$('#modeR').addEventListener('click', ()=>setGizmoMode('rotate'));
+$('#modeS').addEventListener('click', ()=>setGizmoMode('scale'));
+window.addEventListener('keydown', (e)=>{
+  if (e.target.tagName==='INPUT' || e.target.tagName==='TEXTAREA') return;
+  if (e.key==='w' || e.key==='W') setGizmoMode('translate');
+  if (e.key==='e' || e.key==='E') setGizmoMode('rotate');
+  if (e.key==='r' || e.key==='R') setGizmoMode('scale');
+});
+
+// ---------- UI wiring ----------
+function toggleSourceBoxes(){
+  const mFile = document.querySelector('input[name="mSrc"][value="file"]').checked;
+  $('#mFileBox').style.display = mFile?'':'none';
+  $('#mUrlBox').style.display  = mFile?'none':'';
+  const tFile = document.querySelector('input[name="tSrc"][value="file"]').checked;
+  $('#tFileBox').style.display = tFile?'':'none';
+  $('#tUrlBox').style.display  = tFile?'none':'';
+}
+document.querySelectorAll('input[name="mSrc"],input[name="tSrc"]').forEach(r=>r.addEventListener('change', ()=>{
+  if (r.name==='mSrc') project.model.source = r.value;
+  if (r.name==='tSrc'){ project.target.mindSource=r.value; project.target.previewSource=r.value; }
+  toggleSourceBoxes();
+}));
+
+document.querySelectorAll('input[name="mode"]').forEach(r=>r.addEventListener('change', e=>{
+  project.mode = e.target.value;
+  $('#targetCard').style.display = project.mode==='image' ? '' : 'none';
+}));
+
+// Drag & drop for GLB
+const drop = $('#dropGlb');
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation();drop.classList.add('drag');}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();e.stopPropagation();drop.classList.remove('drag');}));
+drop.addEventListener('drop', async (e)=>{
+  const file = [...e.dataTransfer.files].find(f=>f.name.toLowerCase().endsWith('.glb'));
+  if (!file) return;
+  await importGLBFile(file);
+});
+
+// File inputs
+$('#modelFile').addEventListener('change', async e=>{
+  const f = e.target.files[0]; if (f) await importGLBFile(f);
+});
+$('#usdzFile').addEventListener('change', async e=>{
+  const f = e.target.files[0]; if (!f) return;
+  const id = uuid(); blobs[id]=f; await set(DB_PREFIX+'file:'+id, f);
+  project.model.usdzFileId=id; project.model.usdzFileName=f.name||'model.usdz';
+});
+$('#targetMindFile').addEventListener('change', async e=>{
+  const f = e.target.files[0]; if (!f) return;
+  const id=uuid(); blobs[id]=f; await set(DB_PREFIX+'file:'+id, f);
+  project.target.mindFileId=id; project.target.mindName=f.name||'target.mind';
+});
+$('#targetPreviewFile').addEventListener('change', async e=>{
+  const f = e.target.files[0]; if (!f) return;
+  const id=uuid(); blobs[id]=f; await set(DB_PREFIX+'file:'+id, f);
+  project.target.previewFileId=id; project.target.previewName=f.name||'target.png';
+});
+$('#modelUrl').addEventListener('change', e=>{ project.model.url = e.target.value.trim(); });
+$('#usdzUrl').addEventListener('change', e=>{ project.model.usdzUrl = e.target.value.trim(); });
+$('#targetMindUrl').addEventListener('change', e=>{ project.target.mindUrl = e.target.value.trim(); });
+$('#targetPreviewUrl').addEventListener('change', e=>{ project.target.previewUrl = e.target.value.trim(); });
+
+$('#animName').addEventListener('change', e=>{ project.model.animation = e.target.value; loadModelForViewport(); });
+
+function refreshAnimDropdown(){
+  const box = $('#animName');
+  const cur = box.value;
+  box.innerHTML = '';
+  if (!gltfAnims.length){ box.insertAdjacentHTML('beforeend','<option value="none">keine</option>'); project.model.animation='none'; }
+  else {
+    box.insertAdjacentHTML('beforeend','<option value="*">alle</option>');
+    gltfAnims.forEach(c=>box.insertAdjacentHTML('beforeend', `<option value="${c.name}">${c.name}</option>`));
+    box.value = gltfAnims.some(c=>c.name===cur)?cur:'*';
+    project.model.animation = box.value;
+  }
+}
+
+// Lighting inputs
+['#hemi','#dirI','#dx','#dy','#dz'].forEach(sel=>{
+  $(sel).addEventListener('change', ()=>{
+    project.lighting.hemi = num($('#hemi').value,1.0);
+    project.lighting.dir.intensity = num($('#dirI').value,1.0);
+    project.lighting.dir.pos = [num($('#dx').value),num($('#dy').value),num($('#dz').value)];
+    hemi.intensity = project.lighting.hemi;
+    dir.intensity = project.lighting.dir.intensity;
+    const [x,y,z]=project.lighting.dir.pos; dir.position.set(x,y,z);
+  });
+});
+
+// Meta inputs
+$('#projName').addEventListener('change', e=>{ project.name = e.target.value||'Unbenannt'; updateBar(); });
+$('#title').addEventListener('change', e=>{ project.meta.title = e.target.value; });
+$('#tips').addEventListener('change', e=>{ project.meta.tips = e.target.value.split('\n').map(s=>s.trim()).filter(Boolean); });
+
+// ---------- Import helpers ----------
+async function importGLBFile(file){
+  const id = uuid();
+  blobs[id]=file; await set(DB_PREFIX+'file:'+id, file);
+  project.model.source='file'; project.model.fileId=id; project.model.fileName=file.name||'model.glb';
+  document.querySelector('input[name="mSrc"][value="file"]').checked = true;
+  toggleSourceBoxes();
+  await loadModelForViewport();
+}
+
+// ---------- Build scene.json ----------
+function buildSceneJSON(){
+  const scene = {
+    meta: { version:'1.0', mode: project.mode, title: project.meta.title, tips: project.meta.tips },
+    model: {
+      url: project.model.source==='url' ? (project.model.url||'') : './'+(project.model.fileName||'model.glb'),
+      usdzUrl: (project.model.usdzSource==='url' ? (project.model.usdzUrl||'') :
+               (project.model.usdzFileId? './'+(project.model.usdzFileName||'model.usdz') : undefined)),
+      position: project.transform.position,
+      rotation: project.transform.rotation,
+      scale:    project.transform.scale,
+      animation: project.model.animation||'none'
+    },
+    lighting: project.lighting,
+    audio: { url:null, loop:true, volume:0.8, autoplayOnTarget:false }
+  };
+  if (project.mode==='image'){
+    scene.target = {
+      mindUrl: project.target.mindSource==='url' ? (project.target.mindUrl||'') :
+               (project.target.mindFileId? './'+(project.target.mindName||'target.mind') : ''),
+      previewUrl: project.target.previewSource==='url' ? (project.target.previewUrl||'') :
+                  (project.target.previewFileId? './'+(project.target.previewName||'target.png') : '')
+    };
+  }
   return scene;
 }
 
-/* ---------- Preview (model-viewer) ---------- */
-async function updatePreview(){
-  const scene = buildScene();
-  const mv = $('#prev');
-  mv.src = scene.model.url || mv.src;
-  mv.cameraOrbit = '0deg 65deg auto';
-  mv.cameraTarget = 'auto';
-  mv.fieldOfView = '30deg';
-  // Animation setzen (falls vorhanden)
-  mv.addEventListener('load', () => {
-    try{
-      const names = mv.availableAnimations || [];
-      const sel = $('#animName').value;
-      if (sel === 'none') { mv.animationName = null; mv.autoplay = false; }
-      else if (sel === '*' && names.length){ mv.animationName = names[0]; mv.autoplay = true; }
-      else if (sel && sel !== '*') { mv.animationName = sel; mv.autoplay = true; }
-    }catch{}
-    mv.jumpCameraToGoal();
-  }, {once:true});
-}
+// ---------- ZIP export ----------
+async function exportZIP(){
+  const slug = $('#slug').value.trim()||'scene';
+  const zip = new JSZip();
+  const scene = buildSceneJSON();
+  zip.file('scene.json', JSON.stringify(scene,null,2));
 
-/* ---------- Fill animation dropdown from GLB ---------- */
-async function refreshAnimationList(){
-  const mv = $('#prev');
-  const url = val('#modelUrl');
-  if (!url) return;
-  // Lade kurz ins versteckte model-viewer (oder nimm das vorhandene)
-  mv.src = url;
-  mv.addEventListener('load', ()=>{
-    const box = $('#animName');
-    const names = mv.availableAnimations || [];
-    const current = box.value;
-    box.innerHTML = '';
-    if (names.length===0){
-      box.insertAdjacentHTML('beforeend','<option value="none">keine</option>');
-    }else{
-      box.insertAdjacentHTML('beforeend','<option value="*">alle</option>');
-      names.forEach(n=>box.insertAdjacentHTML('beforeend', `<option value="${n}">${n}</option>`));
+  // add files from IndexedDB
+  if (project.model.source==='file' && project.model.fileId){
+    const b = blobs[project.model.fileId] || await get(DB_PREFIX+'file:'+project.model.fileId);
+    if (b) zip.file(project.model.fileName||'model.glb', b);
+  }
+  if (project.model.usdzFileId){
+    const b = blobs[project.model.usdzFileId] || await get(DB_PREFIX+'file:'+project.model.usdzFileId);
+    if (b) zip.file(project.model.usdzFileName||'model.usdz', b);
+  }
+  if (project.mode==='image'){
+    if (project.target.mindFileId){
+      const b = blobs[project.target.mindFileId] || await get(DB_PREFIX+'file:'+project.target.mindFileId);
+      if (b) zip.file(project.target.mindName||'target.mind', b);
     }
-    // versuche, bisherigen Wert beizubehalten
-    if ([...box.options].some(o=>o.value===current)) box.value = current;
-  }, {once:true});
-}
+    if (project.target.previewFileId){
+      const b = blobs[project.target.previewFileId] || await get(DB_PREFIX+'file:'+project.target.previewFileId);
+      if (b) zip.file(project.target.previewName||'target.png', b);
+    }
+  }
 
-/* ---------- Export JSON ---------- */
-function downloadJSON(){
-  const scene = buildScene();
-  const blob = new Blob([JSON.stringify(scene,null,2)], {type:'application/json'});
+  const blob = await zip.generateAsync({type:'blob'});
   const a = document.createElement('a');
-  a.download = 'scene.json';
-  a.href = URL.createObjectURL(blob);
-  a.click();
+  a.download = `${slug}.zip`; a.href = URL.createObjectURL(blob); a.click();
   URL.revokeObjectURL(a.href);
 }
 
-/* ---------- Links + QR ---------- */
+// ---------- Links + QR ----------
 function makeLinks(){
-  const slug = val('#slug');
-  const list = $('#linkList');
-  const qrBox = $('#qr');
-  list.innerHTML = ''; qrBox.innerHTML='';
-
-  if (!slug){ list.innerHTML = '<p class="warn">Bitte Slug eingeben.</p>'; return; }
-
+  const slug = $('#slug').value.trim();
+  const wrap = $('#links'); const qr = $('#qr'); wrap.innerHTML=''; qr.innerHTML='';
+  if (!slug){ wrap.innerHTML='<p class="warn">Bitte Slug eingeben.</p>'; return; }
   const sceneUrl = `https://cdn.jsdelivr.net/gh/krischihh/area@scenes/scenes/published/${encodeURIComponent(slug)}/scene.json`;
   const enc = encodeURIComponent(sceneUrl);
   const base = 'https://krischihh.github.io/area';
-
   const urls = {
     'Image-Viewer':   `${base}/image-ar/viewer.html?scene=${enc}`,
     'Surface (WebXR)':`${base}/surface-ar/webxr.html?scene=${enc}`,
     'Surface (Native)':`${base}/surface-ar/index.html?scene=${enc}`
   };
-
-  Object.entries(urls).forEach(([label,href])=>{
-    const a = document.createElement('a'); a.href = href; a.target = '_blank'; a.rel='noopener';
-    a.textContent = `${label}: ${href}`;
-    list.appendChild(a);
-  });
-
-  // QR für den Image-Viewer (als „klassischer“ Einstieg)
+  for (const [label,href] of Object.entries(urls)){
+    const a = document.createElement('a'); a.href=href; a.target='_blank'; a.textContent=label+': '+href; wrap.appendChild(a); wrap.appendChild(document.createElement('br'));
+  }
   const canvas = document.createElement('canvas');
-  canvas.width = 840; canvas.height = 840;
-  QRCode.toCanvas(canvas, urls['Image-Viewer'], { errorCorrectionLevel:'M', margin:1, scale:8 }, ()=>{
-    const vis = document.createElement('canvas'); vis.width=240; vis.height=240;
-    const ctx = vis.getContext('2d'); ctx.imageSmoothingEnabled=false;
-    ctx.drawImage(canvas,0,0,vis.width,vis.height);
-    qrBox.appendChild(vis);
+  QRCode.toCanvas(canvas, urls['Image-Viewer'], {errorCorrectionLevel:'M', margin:1, scale:8}, ()=>{
+    const vis=document.createElement('canvas'); vis.width=220; vis.height=220;
+    const ctx=vis.getContext('2d'); ctx.imageSmoothingEnabled=false; ctx.drawImage(canvas,0,0,vis.width,vis.height);
+    qr.appendChild(vis);
   });
 }
 
-/* ---------- UI wiring ---------- */
-$('#btnPreview').addEventListener('click', ()=>{ refreshAnimationList(); updatePreview(); });
-$('#modelUrl').addEventListener('change', refreshAnimationList);
-$('#btnExport').addEventListener('click', downloadJSON);
-$('#btnMakeLinks').addEventListener('click', makeLinks);
+// ---------- Projects in IndexedDB ----------
+async function saveProject(asNew=false){
+  if (asNew || !project.id) project.id = uuid();
+  project.name = $('#projName').value.trim() || 'Unbenannt';
+  project.updatedAt = Date.now();
+  await set(DB_PREFIX+'project:'+project.id, project);
+  // update list
+  let list = await get(PROJ_LIST_KEY) || [];
+  const idx = list.findIndex(p=>p.id===project.id);
+  const entry = {id:project.id, name:project.name, updatedAt:project.updatedAt};
+  if (idx>=0) list[idx]=entry; else list.push(entry);
+  await set(PROJ_LIST_KEY, list);
+  await refreshOpenList();
+  updateBar();
+}
+async function refreshOpenList(){
+  const list = await get(PROJ_LIST_KEY) || [];
+  list.sort((a,b)=>b.updatedAt-a.updatedAt);
+  const sel = $('#openList'); sel.innerHTML='<option value="">Projekt öffnen…</option>';
+  list.forEach(p=>{
+    const o=document.createElement('option'); o.value=p.id; o.textContent=`${p.name} – ${new Date(p.updatedAt).toLocaleString()}`;
+    sel.appendChild(o);
+  });
+}
+async function openProject(id){
+  const data = await get(DB_PREFIX+'project:'+id);
+  if (!data){ alert('Projekt nicht gefunden.'); return; }
+  project = data;
+  fillUIFromProject();
+  await loadModelForViewport();
+}
+async function deleteProject(){
+  if (!project?.id) return;
+  if (!confirm('Projekt löschen?')) return;
+  await del(DB_PREFIX+'project:'+project.id);
+  let list = await get(PROJ_LIST_KEY) || [];
+  list = list.filter(p=>p.id!==project.id); await set(PROJ_LIST_KEY, list);
+  project = defaultProject();
+  fillUIFromProject(); await refreshOpenList(); await loadModelForViewport();
+}
 
-// Modus: Position-Row nur im Image-Modus zeigen
-document.querySelectorAll('input[name="mode"]').forEach(r=>r.addEventListener('change', (e)=>{
-  $('#targetCard').style.display = (e.target.value==='image') ? '' : 'none';
-  $('#posRow').style.display     = (e.target.value==='image') ? '' : 'none';
-}));
+function updateBar(){
+  $('#projInfo').textContent = project?.name ? `Projekt: ${project.name}` : '–';
+}
 
-// Initial
-refreshAnimationList();
-updatePreview();
+function fillUIFromProject(){
+  $('#projName').value = project.name || 'Unbenannt';
+  document.querySelector(`input[name="mode"][value="${project.mode||'image'}"]`).checked = true;
+  $('#targetCard').style.display = project.mode==='image' ? '' : 'none';
+  // sources
+  document.querySelector(`input[name="mSrc"][value="${project.model.source||'file'}"]`).checked = true;
+  document.querySelectorAll('input[name="tSrc"]').forEach(r=> r.checked = (r.value === (project.target.mindSource||'file')));
+  toggleSourceBoxes();
+  // urls
+  $('#modelUrl').value = project.model.url||'';
+  $('#usdzUrl').value = project.model.usdzUrl||'';
+  $('#targetMindUrl').value = project.target.mindUrl||'';
+  $('#targetPreviewUrl').value = project.target.previewUrl||'';
+  // transform
+  updateTransformInputs();
+  // lighting
+  $('#hemi').value = project.lighting.hemi; $('#dirI').value = project.lighting.dir.intensity;
+  $('#dx').value = project.lighting.dir.pos[0]; $('#dy').value = project.lighting.dir.pos[1]; $('#dz').value = project.lighting.dir.pos[2];
+  // meta
+  $('#title').value = project.meta.title||''; $('#tips').value = (project.meta.tips||[]).join('\n');
+  updateBar();
+}
+
+// ---------- Top bar wiring ----------
+$('#newProj').addEventListener('click', async ()=>{
+  project = defaultProject(); fillUIFromProject(); await loadModelForViewport();
+});
+$('#saveProj').addEventListener('click', ()=>saveProject(false));
+$('#saveAsProj').addEventListener('click', ()=>saveProject(true));
+$('#openList').addEventListener('change', async e=>{ if (e.target.value) await openProject(e.target.value); });
+$('#delProj').addEventListener('click', deleteProject);
+
+// Export + Links
+$('#btnZip').addEventListener('click', exportZIP);
+$('#btnLinks').addEventListener('click', makeLinks);
+
+// Init
+project = defaultProject();
+fillUIFromProject();
+await refreshOpenList();
 </script>
 </body>
 </html>
