@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>Image Viewer – AR (scene.json, Aero-Flow)</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  html,body{
+    margin:0;height:100%;
+    background:#000;color:#fff;font-family:system-ui;
+    overflow:hidden;overscroll-behavior:none;touch-action:manipulation
+  }
+  /* VR-UI sicher ausblenden */
+  .a-enter-vr,.a-enter-vr-button,.a-modal{display:none!important}
+
+  /* Ebenen: 0 Video (Preview/MindAR), 1 Canvas (nach Start), 2 Hint, 3 Overlay, 4 Error */
+  #videoLayer{position:fixed;inset:0;z-index:0;width:100vw;height:100svh;background:#000}
+  #videoLayer video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;display:block}
+  #poster{position:absolute;inset:0;background:center/cover no-repeat url("/area/assets/targets/target.png?v=1")}
+  a-scene{position:fixed;inset:0;z-index:1}
+
+  /* Hint (Target-Preview) oben rechts */
+  #hint{position:fixed;right:max(12px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));z-index:2;pointer-events:none;display:none}
+  #hint img{width:min(28vw,180px);height:auto;border-radius:12px;opacity:.92;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+
+  /* Overlay-Kachel (Aero-Stil) */
+  #overlay{
+    position:fixed;inset:0;z-index:3;display:grid;place-items:center;
+    padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right))
+            max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
+    background:linear-gradient(180deg,rgba(0,0,0,.55),rgba(0,0,0,.35));
+    transition:opacity .18s ease-out, visibility .18s ease-out
+  }
+  #overlay.hidden{opacity:0;visibility:hidden}
+  .card{
+    width:min(92vw,520px);max-height:min(80svh,700px);
+    display:flex;flex-direction:column;gap:12px;
+    border-radius:16px;padding:16px;background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.15);box-shadow:0 10px 30px rgba(0,0,0,.35)
+  }
+  .card img{width:100%;max-height:44svh;object-fit:cover;border-radius:12px}
+  .card h2{margin:4px 0 0;font-size:18px}
+  .tips{margin:0;padding-left:18px;opacity:.9}
+  .tips li{margin:2px 0}
+  .btn{padding:12px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:#111;color:#fff;width:100%}
+
+  /* Error-Badge (falls scene.json fehlt) */
+  #err{position:fixed;left:12px;top:12px;z-index:4;background:#b00020;padding:8px 10px;border-radius:8px;display:none;font:12px/1.35 monospace}
+
+  /* Fallback für Browser ohne svh */
+  @supports not (height:100svh){
+    html,body,#videoLayer,a-scene{height:calc(var(--vh,1vh)*100)}
+  }
+</style>
+
+<!-- Libs -->
+<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+<script src="https://unpkg.com/aframe-extras@6.1.1/dist/aframe-extras.min.js"></script>
+</head>
+<body>
+  <!-- 0) Kamera-Preview (läuft sofort) -->
+  <div id="videoLayer">
+    <div id="poster"></div>
+    <video id="preview" autoplay muted playsinline></video>
+  </div>
+
+  <!-- 1) Hint (nach Start bis targetFound sichtbar) -->
+  <div id="hint"><img id="hintImg" alt="Referenzbild"></div>
+
+  <!-- 2) Overlay-Kachel (Aero-Text angepasst) -->
+  <div id="overlay" role="dialog" aria-modal="true">
+    <div class="card">
+      <img id="overlayImg" alt="Szenenbild">
+      <h2 id="overlayTitle">AR-Erlebnis starten</h2>
+      <ul class="tips" id="overlayTips">
+        <li>Achten Sie auf Ihre Umgebung.</li>
+        <li>Halten Sie das Gerät ruhig und richten Sie es auf das Bild.</li>
+        <li>Sorgen Sie für gute Beleuchtung.</li>
+      </ul>
+      <button id="startBtn" class="btn">OK – Scanner starten</button>
+    </div>
+  </div>
+
+  <div id="err"></div>
+
+<script>
+/* -------- Viewport Fallback -------- */
+(function fixVH(){
+  function setVH(){ document.documentElement.style.setProperty('--vh', (window.innerHeight*0.01)+'px'); }
+  setVH(); addEventListener('resize', setVH, {passive:true});
+})();
+
+/* -------- Szene laden (scene.json über ?scene=...) -------- */
+const qs = new URLSearchParams(location.search);
+const sceneUrl = qs.get('scene');
+const showErr = (m)=>{ const el=document.getElementById('err'); el.textContent=m; el.style.display='block'; };
+
+let cfg = {
+  meta: { version:"1.0", mode:"image", title:null, tips:null },
+  target: { mindUrl:"/area/assets/targets/target.mind", previewUrl:"/area/assets/targets/target.png" },
+  model:  { url:"https://modelviewer.dev/shared-assets/models/Astronaut.glb", position:[0,0,0.05], rotation:[0,0,0], scale:[0.6,0.6,0.6], animation:"*" },
+  lighting: { hemi:1.2, dir:{ intensity:1.0, pos:[0,6,0] } },
+  audio: { url:null, loop:true, volume:0.8, autoplayOnTarget:false }
+};
+
+(async () => {
+  if (!sceneUrl){ showErr('Fehlender Parameter ?scene=<URL zu scene.json>'); }
+  else {
+    try{
+      const res = await fetch(sceneUrl, {cache:'no-store'});
+      if (!res.ok) throw new Error(res.status+' '+res.statusText);
+      const j = await res.json();
+      // shallow-merge (nur bekannte Felder)
+      cfg = Object.assign({}, cfg, j, {
+        target: Object.assign({}, cfg.target, j.target||{}),
+        model:  Object.assign({}, cfg.model,  j.model ||{}),
+        lighting: Object.assign({}, cfg.lighting, j.lighting||{}),
+        audio:  Object.assign({}, cfg.audio,  j.audio ||{})
+      });
+    }catch(e){ showErr('scene.json konnte nicht geladen werden: '+e); }
+  }
+
+  // Overlay-Texte/Bilder aus scene.json
+  const preview = cfg.target?.previewUrl || "/area/assets/targets/target.png";
+  document.getElementById('hintImg').src    = preview + '?v=' + Date.now();
+  document.getElementById('overlayImg').src = preview + '?v=' + Date.now();
+  if (cfg.meta?.title) document.getElementById('overlayTitle').textContent = cfg.meta.title;
+  if (Array.isArray(cfg.meta?.tips) && cfg.meta.tips.length){
+    document.getElementById('overlayTips').innerHTML = cfg.meta.tips.map(t=>`<li>${t}</li>`).join('');
+  }
+})();
+
+/* -------- Sofort: leichte Kamera-Preview starten -------- */
+const previewVideo = document.getElementById('preview');
+const poster       = document.getElementById('poster');
+async function startPreview(){
+  try{
+    const constraints = {
+      video: {
+        facingMode: { ideal: 'environment' },
+        width:  { ideal: 1280, max: 1280 },   // ~720p
+        height: { ideal: 720,  max: 720  },
+        frameRate: { ideal: 24, max: 30 }
+      },
+      audio:false
+    };
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    previewVideo.srcObject = stream;
+    poster.style.display = 'none';
+  }catch(e){
+    console.warn('Preview-Start fehlgeschlagen:', e);
+    // Poster bleibt sichtbar
+  }
+}
+startPreview();
+
+/* -------- Aero-Flow: Overlay bleibt, Kamera läuft, MindAR erst nach OK -------- */
+const overlay   = document.getElementById('overlay');
+const startBtn  = document.getElementById('startBtn');
+const videoLayer= document.getElementById('videoLayer');
+const hint      = document.getElementById('hint');
+
+function stopPreview(){
+  const s = previewVideo.srcObject;
+  if (s && s.getTracks) s.getTracks().forEach(t=>t.stop());
+  previewVideo.srcObject = null;
+  previewVideo.style.display = 'none';
+}
+
+function attachMindarVideoWhenReady(){
+  const v = document.getElementById('mindar-image-video') || document.querySelector('video#mindar-image-video');
+  if (!v){ requestAnimationFrame(attachMindarVideoWhenReady); return; }
+  v.setAttribute('playsinline',''); v.muted = true; v.autoplay = true;
+  if (v.parentElement !== videoLayer) videoLayer.appendChild(v);
+  Object.assign(v.style,{position:'absolute',inset:'0',width:'100%',height:'100%',objectFit:'cover',display:'block'});
+}
+
+async function buildAndStartMindAR(){
+  const scene = document.createElement('a-scene');
+  scene.setAttribute('embedded','');
+  scene.setAttribute('renderer','alpha:true; antialias:false; precision:mediump; physicallyCorrectLights:false; sortObjects:true');
+  scene.setAttribute('vr-mode-ui','enabled:false');
+  scene.setAttribute('device-orientation-permission-ui','enabled:true');
+  scene.style.position='fixed'; scene.style.inset='0'; scene.style.zIndex='1';
+
+  // MindAR-Config aus scene.json
+  scene.setAttribute('mindar-image', `imageTargetSrc: ${cfg.target.mindUrl}; uiScanning: true; uiLoading: true`);
+
+  // Kamera
+  const cam = document.createElement('a-camera');
+  cam.setAttribute('look-controls','enabled:false');
+  scene.appendChild(cam);
+
+  // Licht
+  const hemi = document.createElement('a-entity');
+  hemi.setAttribute('light', `type:hemisphere; intensity:${cfg.lighting?.hemi ?? 1.2}`);
+  scene.appendChild(hemi);
+  const dir = document.createElement('a-entity');
+  dir.setAttribute('light', `type:directional; intensity:${cfg.lighting?.dir?.intensity ?? 1.0}`);
+  dir.setAttribute('position', (cfg.lighting?.dir?.pos ?? [0,6,0]).join(' '));
+  scene.appendChild(dir);
+
+  // Marker + Modell
+  const marker = document.createElement('a-entity');
+  marker.setAttribute('mindar-image-target','targetIndex: 0');
+
+  const model = document.createElement('a-gltf-model');
+  model.setAttribute('src', cfg.model.url);
+  if (cfg.model.position) model.setAttribute('position', cfg.model.position.join(' '));
+  if (cfg.model.rotation) model.setAttribute('rotation', cfg.model.rotation.join(' '));
+  if (cfg.model.scale)    model.setAttribute('scale',    cfg.model.scale.join(' '));
+  if (cfg.model.animation && cfg.model.animation !== 'none'){
+    model.setAttribute('animation-mixer', `clip:${cfg.model.animation}; loop:repeat`);
+  }
+  marker.appendChild(model);
+  scene.appendChild(marker);
+
+  // Optional: Audio (ohne UI, startet bei Target wenn erlaubt)
+  let audioEl = null;
+  if (cfg.audio?.url){
+    audioEl = document.createElement('audio');
+    audioEl.src = cfg.audio.url;
+    audioEl.loop = !!cfg.audio.loop;
+    audioEl.volume = typeof cfg.audio.volume==='number' ? cfg.audio.volume : 0.8;
+    document.body.appendChild(audioEl);
+  }
+
+  document.body.appendChild(scene);
+
+  // Events
+  marker.addEventListener('targetFound', ()=>{
+    hint.style.display='none';
+    if (audioEl && cfg.audio.autoplayOnTarget){ audioEl.play().catch(()=>{}); }
+  });
+  marker.addEventListener('targetLost',  ()=>{ hint.style.display='block'; });
+
+  // Start: Preview aus, MindAR an
+  await new Promise(res => scene.addEventListener('loaded', res, {once:true}));
+  const sys = scene.systems['mindar-image-system'];
+  stopPreview();
+  await sys.start();
+  setTimeout(attachMindarVideoWhenReady, 120);
+  hint.style.display = 'block';
+
+  // Akku sparen: pausieren bei Hintergrund
+  document.addEventListener('visibilitychange', () => {
+    try { document.hidden ? sys.stop() : sys.start(); } catch(e){}
+  }, {passive:true});
+}
+
+startBtn.addEventListener('click', async ()=>{
+  overlay.classList.add('hidden');  // weicher Fade
+  try { await buildAndStartMindAR(); }
+  catch(e){ showErr('Start fehlgeschlagen: '+e); overlay.classList.remove('hidden'); }
+});
+</script>
+</body>
+</html>
