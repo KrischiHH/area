@@ -7,7 +7,7 @@
   <style>
     *,*::before,*::after{box-sizing:border-box}
     html,body{margin:0;height:100%;overflow:hidden;background:#000;color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-    canvas{display:block; background:transparent!important}
+    canvas{display:block;background:transparent!important}
     /* UI overlay */
     #ui{position:fixed;inset:0;pointer-events:none;z-index:10}
     #top{position:absolute;right:max(12px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));display:flex;gap:8px}
@@ -15,7 +15,7 @@
     #hint{position:absolute;left:50%;bottom:max(20px,env(safe-area-inset-bottom));transform:translateX(-50%);
           background:rgba(0,0,0,.55);padding:10px 12px;border-radius:12px;font-size:14px;pointer-events:auto}
     #enter{pointer-events:auto;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);padding:12px 18px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:#111;color:#fff}
-    #err{position:fixed;left:12px;top:12px;z-index:99;background:#b00020;padding:8px 10px;border-radius:8px;display:none;font:12px/1.35 monospace}
+    #err{position:fixed;left:12px;top:12px;z-index:99;background:#b00020;padding:8px 10px;border-radius:8px;display:none;font:12px/1.35 monospace;max-width:min(92vw,640px);white-space:pre-wrap}
   </style>
 
   <script type="importmap">
@@ -33,7 +33,7 @@
     // ---------- Config aus scene.json ----------
     const qs = new URLSearchParams(location.search);
     const sceneUrl = qs.get('scene');
-    const showErr = (m)=>{ const el=document.getElementById('err'); el.textContent=m; el.style.display='block'; };
+    const showErr = (m)=>{ const el=document.getElementById('err'); el.textContent=m; el.style.display='block'; console.error(m); };
 
     let CFG = {
       model:  { url:"https://modelviewer.dev/shared-assets/models/Astronaut.glb",
@@ -70,7 +70,7 @@
       const [dx,dy,dz] = CFG.lighting.dir?.pos ?? [0,6,0];
       dir.position.set(dx,dy,dz); scene.add(dir);
 
-      renderer = new THREE.WebGLRenderer({alpha:true, antialias:false, powerPreference:'low-power'});
+      renderer = new THREE.WebGLRenderer({alpha:true, antialias:false, powerPreference:'low-power', preserveDrawingBuffer:false});
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.0;
@@ -99,9 +99,6 @@
       });
 
       window.addEventListener('resize', onResize);
-      document.addEventListener('visibilitychange', () => {
-        // nichts spezielles; Session stoppt/pausiert selbst
-      });
     }
 
     function onResize(){
@@ -114,24 +111,20 @@
         const loader = new GLTFLoader();
         loader.load(CFG.model.url, (gltf)=>{
           model = gltf.scene;
-          // Transform
           const [sx,sy,sz] = CFG.model.scale ?? [0.6,0.6,0.6];
           model.scale.set(sx,sy,sz);
           const [rx,ry,rz] = CFG.model.rotation ?? [0,0,0];
           model.rotation.set(THREE.MathUtils.degToRad(rx), THREE.MathUtils.degToRad(ry), THREE.MathUtils.degToRad(rz));
           scene.add(model);
-
-          // Animation
           if (gltf.animations && gltf.animations.length){
             mixer = new THREE.AnimationMixer(model);
             if (CFG.model.animation === '*'){
               gltf.animations.forEach(clip=>mixer.clipAction(clip).play());
-            }else if (typeof CFG.model.animation === 'string'){
+            } else if (typeof CFG.model.animation === 'string'){
               const clip = gltf.animations.find(c=>c.name===CFG.model.animation) || gltf.animations[0];
               mixer.clipAction(clip).play();
             }
           }
-          // initial platzieren
           model.position.setFromMatrixPosition(reticle.matrix);
           model.visible = true;
           placed = true;
@@ -159,7 +152,8 @@
       if (!hitTestSourceRequested){
         session.requestReferenceSpace('viewer').then((viewerSpace)=>{
           session.requestHitTestSource({ space: viewerSpace }).then((source)=>{ hitTestSource = source; });
-        });
+        }).catch(e=>showErr('Hit-Test nicht verfügbar: '+e.message));
+
         session.addEventListener('end', ()=>{
           hitTestSourceRequested = false; hitTestSource = null; placed = false;
           reticle.visible = false; if (model) model.visible = false;
@@ -172,9 +166,11 @@
         if (results.length){
           const hit = results[0];
           const pose = hit.getPose(referenceSpace);
-          reticle.visible = !placed;
-          reticle.matrix.fromArray(pose.transform.matrix);
-        }else{
+          if (pose){
+            reticle.visible = !placed;
+            reticle.matrix.fromArray(pose.transform.matrix);
+          }
+        } else {
           reticle.visible = false;
         }
       }
@@ -182,21 +178,37 @@
       renderer.render(scene, camera);
     }
 
-    // AR starten
+    // AR starten – ROBUST mit Fallbacks
     async function startAR(){
-      if (!navigator.xr){ alert('WebXR nicht verfügbar. Nutze ggf. die native Surface-AR Seite.'); return; }
-      const ok = await navigator.xr.isSessionSupported('immersive-ar');
-      if (!ok){ alert('Dein Gerät/Browser unterstützt kein WebXR-AR. Nutze die native Surface-AR Seite.'); return; }
+      const enterBtn = document.getElementById('enter');
+      if (!navigator.xr){ showErr('WebXR nicht verfügbar. Nutze ggf. die native Surface-AR Seite.'); return; }
+      const supported = await navigator.xr.isSessionSupported('immersive-ar');
+      if (!supported){ showErr('Dein Gerät/Browser unterstützt kein WebXR-AR. Nutze ggf. die native Surface-AR Seite.'); return; }
 
-      const sessionInit = {
-        requiredFeatures: ['hit-test','local-floor'],
-        optionalFeatures: ['dom-overlay'],
-        domOverlay: { root: document.getElementById('ui') }
-      };
-      const session = await navigator.xr.requestSession('immersive-ar', sessionInit);
-      renderer.xr.setReferenceSpaceType('local-floor');
+      // Erstmal minimal: nur hit-test als required
+      let session = null;
+      try{
+        session = await navigator.xr.requestSession('immersive-ar', {
+          requiredFeatures: ['hit-test'],
+          optionalFeatures: ['local-floor'] // dom-overlay weglassen – manche Geräte zeigen sonst schwarz
+        });
+      }catch(e){
+        // Fallback ohne local-floor
+        try{
+          session = await navigator.xr.requestSession('immersive-ar', { requiredFeatures: ['hit-test'] });
+        }catch(e2){
+          showErr('AR-Session konnte nicht gestartet werden: '+e2.message);
+          return;
+        }
+      }
+
+      // Referenzraum „local“ ist am kompatibelsten
+      renderer.xr.setReferenceSpaceType('local');
       await renderer.xr.setSession(session);
-      document.getElementById('enter').style.display = 'none';
+
+      // UI updaten
+      enterBtn.style.display = 'none';
+      document.getElementById('hint').textContent = 'Bewege das Gerät, bis der Ring stabil ist. Tippe, um zu platzieren.';
       animate();
     }
 
@@ -209,7 +221,6 @@
 </head>
 <body>
   <div id="err"></div>
-
   <div id="ui" aria-hidden="false">
     <div id="top">
       <button id="reset" class="btn">Neu platzieren</button>
