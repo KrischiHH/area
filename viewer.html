@@ -3,12 +3,11 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-<title>WebAR Viewer (Surface & Image) – Hash Payload</title>
+<title>WebAR Viewer (Surface & Image) – mit Animation</title>
 <style>
   :root{color-scheme:dark}
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:#000;color:#fff;font:14px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-  canvas{display:block}
   #ui{position:fixed;inset:0;pointer-events:none;z-index:10}
   #top{position:absolute;right:max(12px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));display:flex;gap:8px}
   .btn{pointer-events:auto;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:#111;color:#fff}
@@ -21,7 +20,6 @@
          background:#000;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,.2);display:none}
   #thumb img{width:100%;height:100%;object-fit:contain;background:#000}
 </style>
-
 <script type="importmap">
 {
   "imports": {
@@ -49,34 +47,28 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 const $ = s => document.querySelector(s);
 const showErr = (m)=>{ const el=$("#err"); el.textContent=m; el.style.display='block'; console.error(m); };
 
-// -------- Hash-Payload laden --------
+// ---- Hash-Payload ----
 function parseHash(){
-  try{
-    const h = location.hash?.slice(1)||'';
-    if(!h) throw new Error('Kein Payload im Hash (#...). Bitte Link aus dem Editor verwenden.');
-    const json = decodeURIComponent(escape(atob(h)));
-    const p = JSON.parse(json);
-    // erwartet: {mode:'surface'|'image', src, scale, rotationDeg[3], position[3], animIndex, audio?, image?, imageWidthMeters?}
-    if(!p.mode || !p.src) throw new Error('Payload unvollständig (mode/src fehlen).');
-    return p;
-  }catch(e){ showErr('Payload-Fehler: '+e.message); throw e; }
+  const h = location.hash?.slice(1)||'';
+  if(!h) throw new Error('Kein Payload im Hash (#…). Bitte Link aus dem Editor verwenden.');
+  const json = decodeURIComponent(escape(atob(h)));
+  const p = JSON.parse(json);
+  if(!p.mode || !p.src) throw new Error('Payload unvollständig (mode/src fehlen).');
+  return p;
 }
-const PAYLOAD = parseHash();
+const P = (()=>{ try{ return parseHash(); }catch(e){ showErr('Payload-Fehler: '+e.message); throw e; } })();
 
-// -------- THREE/WebXR Basis --------
+// ---- THREE/WebXR Setup ----
 let camera, scene, renderer, reticle, controller;
 let hitTestSource = null, hitTestSourceRequested = false;
-let model = null, mixer = null;
+let model=null, mixer=null, clips=[];
 const clock = new THREE.Clock();
 
 function initThree(){
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera();
-
-  // Licht
   scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.1));
-  const dir = new THREE.DirectionalLight(0xffffff, 1.0);
-  dir.position.set(0,6,0); scene.add(dir);
+  const dir = new THREE.DirectionalLight(0xffffff, 1.0); dir.position.set(0,6,0); scene.add(dir);
 
   renderer = new THREE.WebGLRenderer({alpha:true, antialias:false, powerPreference:'low-power'});
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -86,8 +78,7 @@ function initThree(){
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.xr.enabled = true;
   document.body.appendChild(renderer.domElement);
-
-  window.addEventListener('resize', ()=>renderer.setSize(window.innerWidth, window.innerHeight));
+  addEventListener('resize', ()=>renderer.setSize(innerWidth, innerHeight));
 }
 
 function makeReticle(){
@@ -99,48 +90,58 @@ function makeReticle(){
   scene.add(reticle);
 }
 
+function playAnimations(){
+  if (!mixer || !clips.length) return;
+  const speed = Number(P.animSpeed||1) || 1;
+  mixer.timeScale = speed;
+
+  // Auswahl-Logik: animName > animation="*" > animIndex > default 0
+  let actions=[];
+  if (P.animation==='*' || P.animAll===true){
+    actions = clips.map(c=>mixer.clipAction(c));
+  } else if (typeof P.animName==='string'){
+    const c = clips.find(c=>c.name===P.animName);
+    if (c) actions=[mixer.clipAction(c)];
+  } else {
+    const idx = Math.max(0, Math.min(clips.length-1, parseInt(P.animIndex??0,10)));
+    actions=[mixer.clipAction(clips[idx])];
+  }
+  const loop = (P.animLoop===false) ? THREE.LoopOnce : THREE.LoopRepeat;
+  actions.forEach(a=>{ a.clampWhenFinished = (loop===THREE.LoopOnce); a.setLoop(loop, Infinity).play(); });
+}
+
 function loadModel(atMatrix=null){
   return new Promise((resolve,reject)=>{
     const loader = new GLTFLoader();
-    loader.load(PAYLOAD.src, (gltf)=>{
+    loader.load(P.src, (gltf)=>{
       model = gltf.scene;
-      // Transform aus Payload
-      const s = Number(PAYLOAD.scale||1);
-      model.scale.set(s,s,s);
-      const [rx,ry,rz] = PAYLOAD.rotationDeg||[0,0,0];
+      clips = gltf.animations||[];
+      const s = Number(P.scale||1); model.scale.set(s,s,s);
+      const [rx=0,ry=0,rz=0] = P.rotationDeg||[];
       model.rotation.set(THREE.MathUtils.degToRad(rx), THREE.MathUtils.degToRad(ry), THREE.MathUtils.degToRad(rz));
-
       if (atMatrix){
         model.position.setFromMatrixPosition(atMatrix);
-      } else if (PAYLOAD.position){
-        const [px,py,pz] = PAYLOAD.position;
-        model.position.set(px||0, py||0, pz||0);
+      } else if (P.position){
+        const [px=0,py=0,pz=0] = P.position; model.position.set(px,py,pz);
       }
-
       scene.add(model);
-
-      const anims = gltf.animations||[];
-      if (anims.length){
+      if (clips.length){
         mixer = new THREE.AnimationMixer(model);
-        const idx = Math.max(0, Math.min(anims.length-1, parseInt(PAYLOAD.animIndex||0,10)));
-        const clip = anims[idx];
-        if (clip) mixer.clipAction(clip).play();
+        playAnimations();
       }
       resolve();
-    }, undefined, (err)=> reject(err));
+    }, undefined, reject);
   });
 }
 
-// -------- Surface AR (Hit-Test) --------
+// ---- Surface AR ----
 async function startSurfaceAR(){
   if (!navigator.xr) throw new Error('WebXR nicht verfügbar.');
-  const supported = await navigator.xr.isSessionSupported('immersive-ar');
-  if (!supported) throw new Error('Dein Gerät/Browser unterstützt kein WebXR-AR.');
+  if (!await navigator.xr.isSessionSupported('immersive-ar')) throw new Error('Dein Gerät/Browser unterstützt kein WebXR-AR.');
 
   const variants = [
     { requiredFeatures:['hit-test'], optionalFeatures:['dom-overlay','local-floor'], overlay:true },
-    { requiredFeatures:['hit-test'], optionalFeatures:['local-floor'], overlay:false },
-    { requiredFeatures:['hit-test'], optionalFeatures:[], overlay:false }
+    { requiredFeatures:['hit-test'], optionalFeatures:['local-floor'], overlay:false }
   ];
   let session=null,lastErr=null;
   for (const v of variants){
@@ -156,17 +157,12 @@ async function startSurfaceAR(){
   try{ renderer.xr.setReferenceSpaceType('local-floor'); }catch{}
   await renderer.xr.setSession(session);
 
-  // Controller + Reticle
   controller = renderer.xr.getController(0);
   controller.addEventListener('select', async ()=>{
     if (!reticle?.visible) return;
-    if (!model){
-      await loadModel(reticle.matrix);
-    }else{
-      model.position.setFromMatrixPosition(reticle.matrix);
-      model.visible = true;
-    }
-    $("#hint").textContent = 'Platziert. „Neu platzieren“ tippen zum Verschieben.';
+    if (!model){ await loadModel(reticle.matrix); }
+    else { model.position.setFromMatrixPosition(reticle.matrix); model.visible = true; }
+    $("#hint").textContent = 'Platziert. „Neu platzieren“ möglich.';
     $("#reset").style.display = 'inline-block';
   });
   scene.add(controller);
@@ -180,85 +176,66 @@ async function startSurfaceAR(){
   });
 
   makeReticle();
-
-  $("#reset").onclick = ()=>{
-    if (model) model.visible=false;
-    $("#hint").textContent = 'Bewege das Gerät, bis der Ring stabil ist. Tippe, um zu platzieren.';
-  };
-
   $("#enter").style.display='none';
   $("#hint").textContent = 'Bewege das Gerät, bis der Ring stabil ist. Tippe, um zu platzieren.';
 
   renderer.setAnimationLoop((t, frame)=>{
-    const dt = clock.getDelta();
-    if (mixer) mixer.update(dt);
-
+    const dt = clock.getDelta(); if (mixer) mixer.update(dt);
     if (frame){
       const referenceSpace = renderer.xr.getReferenceSpace();
       const session = renderer.xr.getSession();
-
       if (!hitTestSourceRequested){
         session.requestReferenceSpace('viewer').then(viewerSpace=>{
           session.requestHitTestSource({space:viewerSpace}).then(src=>{ hitTestSource = src; });
         }).catch(e=>showErr('Hit-Test nicht verfügbar: '+e.message));
         hitTestSourceRequested = true;
       }
-
       if (hitTestSource){
         const results = frame.getHitTestResults(hitTestSource);
         if (results.length){
-          const hit = results[0];
-          const pose = hit.getPose(referenceSpace);
+          const hit = results[0], pose = hit.getPose(referenceSpace);
           if (pose){
             reticle.visible = !model || !model.visible;
             reticle.matrix.fromArray(pose.transform.matrix);
           }
-        } else {
-          reticle.visible = false;
-        }
+        } else { reticle.visible = false; }
       }
     }
     renderer.render(scene, camera);
   });
+
+  $("#reset").onclick = ()=>{
+    if (model) model.visible=false;
+    $("#hint").textContent = 'Bewege das Gerät, bis der Ring stabil ist. Tippe, um zu platzieren.';
+  };
 }
 
-// -------- Image AR (WebXR Image Tracking) --------
+// ---- Image AR (WebXR Image Tracking) ----
 async function startImageAR(){
   if (!navigator.xr) throw new Error('WebXR nicht verfügbar.');
-  const supported = await navigator.xr.isSessionSupported('immersive-ar');
-  if (!supported) throw new Error('Dein Gerät/Browser unterstützt kein WebXR-AR.');
+  if (!await navigator.xr.isSessionSupported('immersive-ar')) throw new Error('Dein Gerät/Browser unterstützt kein WebXR-AR.');
 
-  // Bild aus Data-URL → ImageBitmap
-  if (!PAYLOAD.image) throw new Error('Kein Trigger-Bild im Payload vorhanden.');
-  const imgBlob = await (await fetch(PAYLOAD.image)).blob();
+  if (!P.image) throw new Error('Kein Trigger-Bild im Payload vorhanden.');
+  const imgBlob = await (await fetch(P.image)).blob();
   const imgBitmap = await createImageBitmap(imgBlob);
-  const widthMeters = Number(PAYLOAD.imageWidthMeters||0.2);
+  const widthMeters = Number(P.imageWidthMeters||0.2);
 
-  let session;
-  try{
-    session = await navigator.xr.requestSession('immersive-ar', {
-      requiredFeatures: ['image-tracking'],
-      optionalFeatures: ['dom-overlay','local-floor'],
-      trackedImages: [{ image: imgBitmap, widthInMeters: widthMeters }],
-      domOverlay: { root: $("#ui") }
-    });
-  }catch(e){
-    throw new Error('Image Tracking nicht verfügbar: '+e.message+'\n(Tipp: Android Chrome unterstützt dies – iOS derzeit nicht.)');
-  }
-
+  const session = await navigator.xr.requestSession('immersive-ar', {
+    requiredFeatures: ['image-tracking'],
+    optionalFeatures: ['dom-overlay','local-floor'],
+    trackedImages: [{ image: imgBitmap, widthInMeters: widthMeters }],
+    domOverlay: { root: $("#ui") }
+  });
   try{ renderer.xr.setReferenceSpaceType('local-floor'); }catch{}
   await renderer.xr.setSession(session);
 
   $("#enter").style.display='none';
   $("#hint").textContent = 'Suche das Bild. Bei Erkennung erscheint das Modell.';
-  // Thumbnail anzeigen
-  $("#thumbImg").src = PAYLOAD.image; $("#thumb").style.display='block';
+  $("#thumbImg").src = P.image; $("#thumb").style.display='block';
 
   const referenceSpace = await session.requestReferenceSpace('local');
 
-  // Modell vorbereiten (unsichtbar bis getrackt)
-  await loadModel();
-  model.visible = false;
+  await loadModel(); model.visible = false;
 
   session.addEventListener('end', ()=>{
     $("#hint").textContent='Session beendet.';
@@ -266,19 +243,17 @@ async function startImageAR(){
   });
 
   renderer.setAnimationLoop((t, frame)=>{
-    const dt = clock.getDelta();
-    if (mixer) mixer.update(dt);
-
+    const dt = clock.getDelta(); if (mixer) mixer.update(dt);
     if (frame){
       const results = frame.getImageTrackingResults?.() || [];
       for (const res of results){
-        const state = res.trackingState; // 'tracked' | 'emulated' | 'untracked'
         const pose = res.getPose(referenceSpace);
         if (pose){
           model.matrix.fromArray(pose.transform.matrix);
           model.matrix.decompose(model.position, model.quaternion, model.scale);
-          model.visible = (state==='tracked' || state==='emulated');
-          $("#hint").textContent = model.visible ? 'Bild erkannt.' : 'Suche das Bild…';
+          const tracked = (res.trackingState==='tracked' || res.trackingState==='emulated');
+          model.visible = tracked;
+          $("#hint").textContent = tracked ? 'Bild erkannt.' : 'Suche das Bild…';
         }
       }
     }
@@ -286,14 +261,13 @@ async function startImageAR(){
   });
 }
 
-// -------- Bootstrap --------
+// ---- Start ----
 initThree();
-
 $("#enter").addEventListener('click', async ()=>{
   try{
-    if (PAYLOAD.mode === 'surface') await startSurfaceAR();
-    else if (PAYLOAD.mode === 'image') await startImageAR();
-    else throw new Error('Unbekannter Modus: '+PAYLOAD.mode);
+    if (P.mode === 'surface') await startSurfaceAR();
+    else if (P.mode === 'image') await startImageAR();
+    else throw new Error('Unbekannter Modus: '+P.mode);
   }catch(e){ showErr(e.message); }
 });
 </script>
