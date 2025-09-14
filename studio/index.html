@@ -5,15 +5,15 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
 <title>AR Studio – Editor + Viewport + Publish</title>
 <style>
-  :root{--bg:#0e1116;--panel:#0b1323;--muted:#94a3b8;--fg:#e9ecf5;--border:#24314a;--accent:#223049}
+  :root{--bg:#0e1116;--panel:#0b1323;--muted:#94a3b8;--fg:#e9ecf5;--border:#24314a}
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto}
   header.top{display:flex;gap:12px;align-items:center;padding:10px 12px;background:var(--panel);border-bottom:1px solid var(--border)}
   header.top b{font-weight:700}
   header.top .muted{color:var(--muted)}
-  main.app{display:grid;grid-template-columns:280px 1fr;grid-template-rows:1fr;gap:0;height:calc(100% - 52px)}
+  main.app{display:grid;grid-template-columns:280px 1fr;height:calc(100vh - 52px)}
   aside.sidebar{border-right:1px solid var(--border);padding:10px 10px 14px;overflow:auto}
-  #viewport{position:relative;background:#000}
+  #viewport{position:relative;background:#0b0f18}
   #canvasWrap{position:absolute;inset:0}
   .field{display:flex;flex-direction:column;gap:6px;margin:10px 0}
   .row{display:flex;gap:8px;align-items:center}
@@ -27,13 +27,15 @@
   .chip{background:#111a2a;border:1px solid #2a3347;color:#e9ecf5;border-radius:10px;padding:6px 10px}
   #status{position:absolute;left:max(12px,env(safe-area-inset-left));bottom:max(10px,env(safe-area-inset-bottom));z-index:5;opacity:.9}
   #err{position:fixed;left:12px;top:12px;z-index:99;background:#b00020;padding:8px 10px;border-radius:8px;display:none;font:12px/1.35 monospace;max-width:min(92vw,680px);white-space:pre-wrap}
-  /* Publish Panel floating */
+  /* Publish floating */
   #pub-toggle{position:fixed;right:16px;bottom:16px;z-index:99998;background:#1f2a44;color:#fff;border:1px solid #2a3347;border-radius:12px;padding:10px 14px;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.25)}
   #pub-panel{position:fixed;right:16px;bottom:66px;z-index:99999;width:360px;max-width:92vw;background:#0b1323f2;color:#e9ecf5;border:1px solid #2a3347;border-radius:14px;box-shadow:0 20px 48px rgba(0,0,0,.35);display:none}
   #pub-panel header{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border)}
   #pub-panel .body{padding:10px 12px;display:grid;gap:10px}
   #pub-panel .row>*{flex:1}
   #pub-qr{display:block;margin:6px auto 0;background:#fff;border-radius:8px;max-width:100%}
+  /* Drag & Drop Hinweis */
+  #dropHint{position:absolute;inset:0;border:2px dashed #3a4d7a;border-radius:12px;margin:12px;display:none;align-items:center;justify-content:center;color:#cbd5e1;background:rgba(17,26,42,.35);z-index:6}
 </style>
 
 <!-- three.js + addons -->
@@ -50,7 +52,7 @@
 <header class="top">
   <b>AR Studio – Editor</b><span class="muted">Viewport + Animation + Publish</span>
   <span style="flex:1"></span>
-  <span class="muted small">Tipp: GLB aus Blender exportieren (bin+Texturen eingebettet).</span>
+  <span class="muted small">Tipp: aus Blender als <b>GLB</b> exportieren (bin+Texturen eingebettet).</span>
 </header>
 
 <main class="app">
@@ -59,6 +61,7 @@
     <div class="field">
       <label class="small">GLB/GLTF Datei</label>
       <input id="f-file" type="file" accept=".glb,.gltf"/>
+      <button id="demo-load" style="margin-top:6px">Demo laden (Astronaut)</button>
     </div>
     <div class="field">
       <label class="small">oder GLB/GLTF URL</label>
@@ -67,15 +70,14 @@
         <button id="btn-load">Laden</button>
         <button id="btn-probe">Animationen erkennen</button>
       </div>
+      <div class="small muted">Extern: CORS muss <code>Access-Control-Allow-Origin: *</code> setzen, sonst lokal laden.</div>
     </div>
 
     <div class="hline"></div>
 
     <div class="field">
       <label class="small">Animation</label>
-      <select id="anim-name">
-        <option value="*">alle</option>
-      </select>
+      <select id="anim-name"><option value="*">alle</option></select>
       <div class="row">
         <button id="anim-play">Play</button>
         <button id="anim-pause">Pause</button>
@@ -111,7 +113,7 @@
     <div class="hline"></div>
 
     <div class="field">
-      <label class="row" style="gap:8px;align-items:center"><input id="grid-toggle" type="checkbox" checked><span class="small">Grid anzeigen</span></label>
+      <label class="row" style="gap:8px;align-items:center"><input id="grid-toggle" type="checkbox" checked><span class="small">Grid & Achsen anzeigen</span></label>
       <div class="row">
         <button id="cam-reset">Kamera reset</button>
       </div>
@@ -119,15 +121,14 @@
 
     <div class="hline"></div>
 
-    <div class="small muted">Publish sitzt unten rechts (schwebender Button). Der Link öffnet deinen <code>viewer.html</code> und übernimmt Modell, Transform & Animation.</div>
+    <div class="small muted">Publish sitzt unten rechts. Der Link öffnet deinen <code>viewer.html</code> und übernimmt Modell, Transform & Animation.</div>
   </aside>
 
   <!-- VIEWPORT -->
   <section id="viewport" aria-label="3D Viewport">
-    <div class="toolbar">
-      <span class="chip" id="modelName">Kein Modell</span>
-    </div>
+    <div class="toolbar"><span class="chip" id="modelName">Kein Modell</span></div>
     <div id="canvasWrap"></div>
+    <div id="dropHint">GLB hierher ziehen …</div>
     <div id="status" class="small muted">Bereit…</div>
   </section>
 </main>
@@ -175,18 +176,19 @@ import {TransformControls} from 'three/addons/controls/TransformControls.js';
 
 const $ = s=>document.querySelector(s);
 const status = (t)=> $("#status").textContent = t;
-const showErr = (m)=>{ const el=$("#err"); el.textContent=m; el.style.display='block'; console.error(m); setTimeout(()=>el.style.display='none', 5000); };
+const showErr = (m)=>{ const el=$("#err"); el.textContent=m; el.style.display='block'; console.error(m); setTimeout(()=>el.style.display='none', 6000); };
 
 // --- THREE Setup ---
-let scene, camera, renderer, orbit, gizmo, grid;
-let model=null, mixer=null, clips=[], modelSrc=null, modelName='';
+let scene, camera, renderer, orbit, gizmo, grid, axes;
+let model=null, mixer=null, clips=[], viewBlobUrl=null, publishSrc=null, modelName='';
 
 init3D();
 resize(); addEventListener('resize', resize);
 
 function init3D(){
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x000000);
+  scene.background = new THREE.Color(0x0b0f18);
+
   camera = new THREE.PerspectiveCamera(50, 16/9, 0.01, 200);
   camera.position.set(1.8, 1.2, 2.4);
 
@@ -195,8 +197,8 @@ function init3D(){
   renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.8));
   $("#canvasWrap").appendChild(renderer.domElement);
 
-  const amb = new THREE.HemisphereLight(0xffffff, 0x222244, 1.0); scene.add(amb);
-  const dir = new THREE.DirectionalLight(0xffffff, 1.2); dir.position.set(3,5,2); scene.add(dir);
+  const amb = new THREE.HemisphereLight(0xffffff, 0x223355, 1.0); scene.add(amb);
+  const dir = new THREE.DirectionalLight(0xffffff, 1.15); dir.position.set(3,5,2); scene.add(dir);
 
   orbit = new OrbitControls(camera, renderer.domElement);
   orbit.enableDamping = true;
@@ -205,49 +207,84 @@ function init3D(){
   gizmo.addEventListener('dragging-changed', e=> orbit.enabled = !e.value);
   scene.add(gizmo);
 
-  grid = new THREE.GridHelper(10, 20, 0x335577, 0x223344); grid.position.y = 0; scene.add(grid);
+  grid = new THREE.GridHelper(10, 20, 0x88aaff, 0x5577ff);
+  grid.material.transparent = true; grid.material.opacity = 0.9;
+  scene.add(grid);
+
+  axes = new THREE.AxesHelper(0.5); axes.renderOrder = 1; scene.add(axes);
+
+  // Drag & Drop
+  const vp=$("#viewport"), hint=$("#dropHint");
+  ['dragenter','dragover'].forEach(ev=> vp.addEventListener(ev, e=>{ e.preventDefault(); hint.style.display='flex'; }));
+  ['dragleave','drop'].forEach(ev=> vp.addEventListener(ev, e=>{ e.preventDefault(); hint.style.display='none'; }));
+  vp.addEventListener('drop', async (e)=>{ const f=e.dataTransfer.files?.[0]; if(f) await loadFromFile(f); });
 
   animate();
 }
 function resize(){ const el=$("#viewport"); const w=el.clientWidth, h=el.clientHeight; renderer.setSize(w,h); camera.aspect=w/h; camera.updateProjectionMatrix(); }
 
-// --- Loading & Animation ---
+// File helpers
+const readFileDual = (file)=> new Promise((resolve,reject)=>{
+  const reader1=new FileReader(); const reader2=new FileReader();
+  reader1.onload=()=>{ const blob=new Blob([reader1.result]); const blobUrl=URL.createObjectURL(blob); // für Viewport
+    reader2.onload=()=> resolve({blobUrl, dataUrl: reader2.result});
+    reader2.onerror=reject; reader2.readAsDataURL(file); // für Publish
+  };
+  reader1.onerror=reject;
+  reader1.readAsArrayBuffer(file);
+});
+
+async function loadFromFile(file){
+  try{
+    status('Lade Datei…'); const {blobUrl, dataUrl} = await readFileDual(file);
+    await loadFromSrc(blobUrl, file.name);
+    publishSrc = dataUrl; // für Publish
+  }catch(err){ showErr('Datei konnte nicht geladen werden: '+err.message); }
+}
+
+async function loadFromURL(url){
+  publishSrc = url; // Viewer lädt direkt von URL (CORS nötig!)
+  await loadFromSrc(url);
+}
+
 const loader = new GLTFLoader();
 
-async function fileToDataURL(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file); }); }
-
-async function loadFrom(src, niceName=''){
+async function loadFromSrc(src, niceName=''){
   status('Lade Modell…');
-  modelSrc = src; modelName = niceName || (typeof src==='string' ? src.split('/').pop() : 'Datei');
+  modelName = niceName || (typeof src==='string' ? src.split('/').pop() : 'Modell');
   $("#modelName").textContent = modelName;
 
-  // Dispose previous
-  if (model){ gizmo.detach(); scene.remove(model); model.traverse(o=>{ if(o.geometry) o.geometry.dispose(); if(o.material){ const m=o.material; if(Array.isArray(m)) m.forEach(x=>x.dispose()); else m.dispose(); } }); }
-  if (mixer){ mixer.uncacheRoot(model); mixer = null; }
-  clips = []; setAnimUI([]);
+  if (viewBlobUrl){ URL.revokeObjectURL(viewBlobUrl); viewBlobUrl=null; }
+  if (model){ gizmo.detach(); scene.remove(model); disposeObject(model); }
+  if (mixer){ mixer.stopAllAction(); mixer.uncacheRoot(model); mixer=null; }
+  clips=[]; setAnimUI([]);
 
   return new Promise((resolve,reject)=>{
     loader.load(src, gltf=>{
-      model = gltf.scene || gltf.scenes[0];
-      // normalize scale a bit (optional):
-      model.position.set(0,0,0);
-      model.rotation.set(0,0,0);
-      model.scale.set(1,1,1);
-      scene.add(model);
-      gizmo.attach(model);
+      model = gltf.scene || gltf.scenes?.[0]; if(!model){ reject(new Error('Kein Scene-Root im GLTF')); return; }
+      model.position.set(0,0,0); model.rotation.set(0,0,0); model.scale.set(1,1,1);
+      scene.add(model); gizmo.attach(model);
 
-      clips = gltf.animations||[];
-      if (clips.length){ mixer = new THREE.AnimationMixer(model); }
+      clips = gltf.animations||[]; if (clips.length) mixer = new THREE.AnimationMixer(model);
       setAnimUI(clips.map(c=>c.name||''));
-      status(`${modelName} geladen. ${clips.length} Animation(en).`);
+      status(`${modelName} geladen · ${clips.length} Animation(en)`);
+      syncTransformInputsFromModel();
       resolve();
     }, undefined, err=>{ showErr('Laden fehlgeschlagen: '+err.message); reject(err); });
   });
 }
 
+function disposeObject(root){
+  root.traverse(o=>{
+    if (o.geometry) o.geometry.dispose();
+    if (o.material){
+      const m=o.material; if (Array.isArray(m)) m.forEach(x=>x.dispose()); else m.dispose();
+    }
+  });
+}
+
 function setAnimUI(names){
-  const sel=$("#anim-name");
-  const keep=sel.value;
+  const sel=$("#anim-name"); const keep=sel.value;
   sel.innerHTML='<option value="*">alle</option>';
   names.forEach(n=> sel.insertAdjacentHTML('beforeend', `<option value="${n}">${n||'(unbenannt)'}</option>`));
   if ([...sel.options].some(o=>o.value===keep)) sel.value=keep;
@@ -256,45 +293,32 @@ function setAnimUI(names){
 function playSelection(){
   if (!mixer || !clips.length) return;
   mixer.stopAllAction();
-  const speed=parseFloat($("#anim-speed").value||'1')||1; const loop=$("#anim-loop").checked;
-  mixer.timeScale = speed;
-
+  mixer.timeScale = parseFloat($("#anim-speed").value||'1')||1;
+  const loop=$("#anim-loop").checked;
   const pick=$("#anim-name").value;
   let acts=[];
   if (pick==='*'){ acts = clips.map(c=>mixer.clipAction(c)); }
-  else {
-    const c = clips.find(c=>c.name===pick) || clips[0];
-    if (c) acts=[mixer.clipAction(c)];
-  }
+  else { const c = clips.find(c=>c.name===pick) || clips[0]; if (c) acts=[mixer.clipAction(c)]; }
   acts.forEach(a=>{ a.clampWhenFinished=!loop; a.setLoop(loop?THREE.LoopRepeat:THREE.LoopOnce, Infinity).play(); });
 }
-
 function pauseAll(){ if (mixer){ mixer.timeScale = 0; } }
 
-// --- UI bindings ---
+// UI bindings
+$("#demo-load").onclick = async ()=>{
+  await loadFromURL('https://modelviewer.dev/shared-assets/models/Astronaut.glb');
+};
 $("#btn-load").onclick = async ()=>{
-  const f=$("#f-file").files[0];
-  const url=($("#f-url").value||'').trim();
+  const f=$("#f-file").files[0]; const url=($("#f-url").value||'').trim();
   try{
-    if (f){ const data=await fileToDataURL(f); await loadFrom(data, f.name); }
-    else if (url){ await loadFrom(url); }
-    else { alert('Datei auswählen oder URL eintragen.'); }
-    syncTransformInputsFromModel();
+    if (f) await loadFromFile(f);
+    else if (url) await loadFromURL(url);
+    else alert('Datei auswählen oder URL eintragen.');
   }catch(e){}
 };
 $("#btn-probe").onclick = async ()=>{
-  if (!modelSrc){ // lädt nur um Clipnamen zu lesen
-    const f=$("#f-file").files[0]; const url=($("#f-url").value||'').trim();
-    if (!f && !url) return alert('Datei oder URL angeben.');
-    try{
-      const src = f ? await fileToDataURL(f) : url;
-      await loadFrom(src, f?f.name:'');
-      pauseAll();
-    }catch(e){}
-  } else {
-    // nur UI refresh
-    setAnimUI(clips.map(c=>c.name||'')); 
-  }
+  if (!publishSrc){ const f=$("#f-file").files[0]; const url=($("#f-url").value||'').trim();
+    if (f) await loadFromFile(f); else if (url) await loadFromURL(url); else return alert('Datei oder URL angeben.');
+  } else { setAnimUI(clips.map(c=>c.name||'')); }
 };
 
 $("#anim-play").onclick = playSelection;
@@ -307,7 +331,7 @@ document.querySelectorAll('[data-gizmo]').forEach(btn=>{
   btn.onclick = ()=> gizmo.setMode(btn.dataset.gizmo);
 });
 
-$("#grid-toggle").onchange = ()=> grid.visible = $("#grid-toggle").checked;
+$("#grid-toggle").onchange = ()=>{ const v=$("#grid-toggle").checked; grid.visible = v; axes.visible = v; };
 $("#cam-reset").onclick = ()=>{ camera.position.set(1.8,1.2,2.4); orbit.target.set(0,0,0); orbit.update(); };
 
 function syncTransformInputsFromModel(){
@@ -333,17 +357,17 @@ function syncTransformInputsFromModel(){
 });
 gizmo.addEventListener('objectChange', syncTransformInputsFromModel);
 
-// --- Publish (build payload from current editor state) ---
+// Publish
 function encodeHash(obj){ const json=JSON.stringify(obj); return '#'+btoa(unescape(encodeURIComponent(json))); }
+const fileToDataURL = (file)=> new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file); });
 
 async function buildPayload(){
-  if (!model || !modelSrc) throw new Error('Kein Modell im Viewport. Lade zuerst ein GLB/GLTF.');
-  // Quelle: bei Datei haben wir DataURL bereits in modelSrc; URL bleibt URL.
+  if (!publishSrc || !model) throw new Error('Kein Modell im Viewport. Lade zuerst ein GLB/GLTF.');
   const s=model.scale.x;
   const pos=[model.position.x, model.position.y, model.position.z];
   const rot=[THREE.MathUtils.radToDeg(model.rotation.x), THREE.MathUtils.radToDeg(model.rotation.y), THREE.MathUtils.radToDeg(model.rotation.z)];
   const payload = {
-    src: modelSrc, scale:s, position:pos, rotationDeg:rot,
+    src: publishSrc, scale:s, position:pos, rotationDeg:rot,
     animSpeed: parseFloat($("#anim-speed").value||'1')||1,
     animLoop: $("#anim-loop").checked
   };
@@ -360,7 +384,7 @@ async function makeImageLink(){
   return ($("#pub-viewer-url").value||'./viewer.html') + encodeHash(p);
 }
 
-// QR helper
+// QR
 const QR_URL = "https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js";
 function ensureQR(){ return new Promise(res=>{ if (window.QRCode) return res(); const s=document.createElement('script'); s.src=QR_URL; s.onload=res; s.onerror=res; document.head.appendChild(s); }); }
 async function drawQR(text){
@@ -369,13 +393,13 @@ async function drawQR(text){
   const img=new Image(); img.onload=()=>{cnv.width=img.width; cnv.height=img.height; const ctx=cnv.getContext('2d'); ctx.clearRect(0,0,cnv.width,cnv.height); ctx.drawImage(img,0,0);}; img.src=dataUrl;
 }
 
-// Publish panel UI
+// Publish UI
 $("#pub-toggle").onclick = ()=> $("#pub-panel").style.display = ($("#pub-panel").style.display==='block'?'none':'block');
 $("#pub-close").onclick = ()=> $("#pub-panel").style.display='none';
 $("#pub-surface").onclick = async ()=>{ try{ const link=await makeSurfaceLink(); $("#pub-link").value=link; drawQR(link);}catch(e){ showErr(e.message);} };
 $("#pub-image").onclick = async ()=>{ try{ const link=await makeImageLink(); $("#pub-link").value=link; drawQR(link);}catch(e){ showErr(e.message);} };
 
-// --- Loop ---
+// Loop
 const clock=new THREE.Clock();
 function animate(){
   requestAnimationFrame(animate);
