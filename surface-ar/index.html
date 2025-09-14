@@ -3,36 +3,29 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-  <title>Surface AR – Native (Full-Bleed)</title>
+  <title>Surface AR – Native (Full-Bleed, Animation)</title>
   <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
   <style>
     :root{color-scheme:dark light}
     *,*::before,*::after{box-sizing:border-box}
     html,body{margin:0;height:100%;background:#000;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
     model-viewer{
-      position:fixed; inset:0;
-      width:100vw; height:100svh;
-      display:block; background:#000; border:0; border-radius:0; overflow:hidden;
+      position:fixed; inset:0; width:100vw; height:100svh; display:block; background:#000; border:0; border-radius:0; overflow:hidden;
       --poster-color:transparent;
     }
     button[slot="ar-button"]{
       position:absolute; left:max(12px,env(safe-area-inset-left)); top:max(12px,env(safe-area-inset-top));
       padding:.75rem 1rem; border-radius:12px; border:1px solid rgba(255,255,255,.25); background:#111; color:#fff
     }
-    #err{
-      position:fixed; left:12px; top:12px; z-index:9;
-      background:#b00020; color:#fff; padding:8px 10px; border-radius:8px; display:none; font:12px/1.35 monospace;
-      max-width:min(92vw,680px); white-space:pre-wrap;
-    }
+    #err{position:fixed;left:12px;top:12px;z-index:9;background:#b00020;color:#fff;padding:8px 10px;border-radius:8px;display:none;font:12px/1.35 monospace;max-width:min(92vw,680px);white-space:pre-wrap}
   </style>
 </head>
 <body>
   <div id="err"></div>
-
   <model-viewer id="mv"
     src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
     ar ar-modes="scene-viewer quick-look webxr"
-    camera-controls
+    camera-controls autoplay
     environment-image="https://modelviewer.dev/shared-assets/environments/neutral.hdr"
     exposure="1" shadow-intensity="1"
     interaction-prompt="none"
@@ -48,7 +41,7 @@
   const sceneUrl = qs.get('scene');
   const showErr = m => { const el = document.getElementById('err'); el.textContent = m; el.style.display='block'; };
 
-  let cfg = { model:{ url:"https://modelviewer.dev/shared-assets/models/Astronaut.glb", usdzUrl:null },
+  let cfg = { model:{ url:"https://modelviewer.dev/shared-assets/models/Astronaut.glb", usdzUrl:null, animation:"*" },
               target:{ previewUrl:null } };
 
   (async ()=>{
@@ -61,17 +54,34 @@
         if (j.target) cfg.target = Object.assign(cfg.target, j.target);
       }catch(e){ showErr('scene.json konnte nicht geladen werden: '+e.message); }
     }
+
     const mv = document.getElementById('mv');
     mv.src = cfg.model.url || mv.src;
     if (cfg.model.usdzUrl) mv.setAttribute('ios-src', cfg.model.usdzUrl); else mv.removeAttribute('ios-src');
     if (cfg.target?.previewUrl) mv.setAttribute('poster', cfg.target.previewUrl);
 
-    // Nach dem Laden sicher „komplett im Bild“
     mv.addEventListener('load', ()=>{
+      // Startansicht
       mv.cameraOrbit = '0deg 70deg auto';
       mv.cameraTarget = 'auto';
       mv.fieldOfView  = '30deg';
       mv.jumpCameraToGoal();
+
+      // Animation wählen
+      const names = mv.availableAnimations || [];
+      const sel = cfg.model.animation;
+      if (sel === 'none'){ mv.autoplay=false; mv.animationName=null; return; }
+      if (sel === '*' || sel==null){
+        if (names.length){ mv.animationName = names[0]; mv.autoplay=true; }
+        return;
+      }
+      if (typeof sel === 'string'){
+        if (names.includes(sel)){ mv.animationName = sel; mv.autoplay=true; }
+        else if (names.length){ mv.animationName = names[0]; mv.autoplay=true; }
+        return;
+      }
+      const idx = Math.max(0, Math.min(names.length-1, parseInt(sel||0,10)));
+      if (names[idx]){ mv.animationName = names[idx]; mv.autoplay=true; }
     });
   })();
 </script>
