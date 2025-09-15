@@ -1,385 +1,510 @@
 <!doctype html>
 <html lang="de">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-<title>AR Studio – Editor + Viewport + Publish</title>
-<style>
-  :root{--bg:#0e1116;--panel:#0b1323;--muted:#94a3b8;--fg:#e9ecf5;--border:#24314a}
-  *{box-sizing:border-box}
-  html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto}
-  body{display:flex;flex-direction:column}
-  header.top{display:flex;gap:12px;align-items:center;padding:10px 12px;background:var(--panel);border-bottom:1px solid var(--border)}
-  header.top b{font-weight:700}
-  header.top .muted{color:var(--muted)}
-  main.app{flex:1;min-height:0;display:grid;grid-template-columns:280px 1fr}
-  aside.sidebar{border-right:1px solid var(--border);padding:10px 10px 14px;overflow:auto}
-  #viewport{position:relative;background:#0b0f18;min-height:0}
-  #canvasWrap{position:absolute;inset:0}
-  .field{display:flex;flex-direction:column;gap:6px;margin:10px 0}
-  .row{display:flex;gap:8px;align-items:center}
-  input[type="text"],input[type="number"],select{width:100%;background:#0e1628;border:1px solid #27334b;color:#e9ecf5;border-radius:8px;padding:8px}
-  input[type="file"]{width:100%}
-  button{background:#223049;border:1px solid #2a3347;color:#e9ecf5;border-radius:10px;padding:8px 10px;cursor:pointer}
-  .muted{color:#a6b4cf}
-  .small{font-size:12px;color:#a6b4cf}
-  .hline{height:1px;background:var(--border);margin:10px 0}
-  .toolbar{position:absolute;left:max(12px,env(safe-area-inset-left));top:max(12px,env(safe-area-inset-top));display:flex;gap:6px;z-index:5}
-  .chip{background:#111a2a;border:1px solid #2a3347;color:#e9ecf5;border-radius:10px;padding:6px 10px}
-  #status{position:absolute;left:max(12px,env(safe-area-inset-left));bottom:max(10px,env(safe-area-inset-bottom));z-index:5;opacity:.9}
-  #err{position:fixed;left:12px;top:12px;z-index:99;background:#b00020;padding:8px 10px;border-radius:8px;display:none;font:12px/1.35 monospace;max-width:min(92vw,680px);white-space:pre-wrap}
-  #pub-toggle{position:fixed;right:16px;bottom:16px;z-index:99998;background:#1f2a44;color:#fff;border:1px solid #2a3347;border-radius:12px;padding:10px 14px;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.25)}
-  #pub-panel{position:fixed;right:16px;bottom:66px;z-index:99999;width:360px;max-width:92vw;background:#0b1323f2;color:#e9ecf5;border:1px solid #2a3347;border-radius:14px;box-shadow:0 20px 48px rgba(0,0,0,.35);display:none}
-  #pub-panel header{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border)}
-  #pub-panel .body{padding:10px 12px;display:grid;gap:10px}
-  #pub-panel .row>*{flex:1}
-  #pub-qr{display:block;margin:6px auto 0;background:#fff;border-radius:8px;max-width:100%}
-  #dropHint{position:absolute;inset:0;border:2px dashed #3a4d7a;border-radius:12px;margin:12px;display:none;align-items:center;justify-content:center;color:#cbd5e1;background:rgba(17,26,42,.35);z-index:6}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WebAR Editor v2.2.1</title>
+  <style>
+    :root{--bg:#0d1017;--panel:#101827;--panel2:#172033;--text:#e9ecf5;--muted:#9fb3d9;--border:#25314a;--accent:#67a8ff;--accent2:#3b82f6}
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,Segoe UI,Inter,Roboto,Arial,sans-serif}
+    .top{height:56px;display:flex;gap:10px;align-items:center;padding:0 12px;background:var(--panel);border-bottom:1px solid var(--border);position:relative;z-index:10}
+    .brand{font-weight:800;letter-spacing:.02em}
+    .ver{opacity:.8;font-weight:700;color:#a7c0ff}
+    .projname{margin-left:8px;padding:4px 8px;border:1px solid var(--border);background:var(--panel2);border-radius:8px;font-weight:800}
+    .sp{flex:1}
 
-<script type="module">
-/* IMPORTANT: Add ?module to unpkg addon URLs so bare 'three' imports get rewritten */
-import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
-import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js?module';
-import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js?module';
-import { TransformControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/TransformControls.js?module';
+    .wrap{height:calc(100vh - 56px);display:grid;grid-template-columns:270px 1fr 420px;gap:10px;padding:10px}
+    .panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;min-height:0}
+    .panel h3{margin:0;padding:10px 12px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+    .content{padding:10px;overflow:auto}
 
-const $ = s=>document.querySelector(s);
-const status = (t)=> $("#status").textContent = t;
-const showErr = (m)=>{ const el=$("#err"); el.textContent=m; el.style.display='block'; console.error(m); setTimeout(()=>el.style.display='none', 6000); };
+    .btn{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:8px;cursor:pointer;font-weight:700}
+    .btn:hover{border-color:var(--accent)}
 
-// THREE state
-let scene, camera, renderer, orbit, gizmo, grid, axes;
-let model=null, mixer=null, clips=[], publishSrc=null;
+    /* Project menu */
+    .menu{ position:relative; }
+    .menubtn{ background:var(--panel2); border:1px solid var(--border); color:var(--text);
+      padding:8px 12px; border-radius:8px; cursor:pointer; font-weight:800; display:inline-flex; align-items:center; gap:6px; }
+    .menu-pop{ position:absolute; top:44px; left:0; min-width:240px; background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:6px; display:none; z-index:20; box-shadow:0 10px 24px rgba(0,0,0,.35); }
+    .menu.open .menu-pop{ display:block; }
+    .menuitem{ display:flex; align-items:center; gap:8px; width:100%; padding:10px 10px; border-radius:8px; background:transparent; border:1px solid transparent; color:var(--text); cursor:pointer; text-align:left; font-weight:700; }
+    .menuitem:hover{ background:var(--panel2); border-color:var(--border); }
+    .menuitem input[type="file"]{ display:none; }
 
-init3D();
-resize(); addEventListener('resize', resize);
+    /* Scene list */
+    #sceneList .row{ display:grid; grid-template-columns:auto 1fr auto auto; gap:8px; align-items:center; padding:6px; border:1px solid var(--border); border-radius:8px; background:var(--panel2); margin-bottom:6px }
+    #sceneList .row.sel{ outline:2px solid var(--accent); }
+    .sname{ text-align:left; background:transparent; border:0; color:var(--text); font-weight:700; cursor:pointer }
+    .iconbtn{ background:#0f1626; border:1px solid var(--border); color:var(--text); padding:4px 8px; border-radius:8px; cursor:pointer; font-weight:700 }
+    .iconbtn.dim{ opacity:.55 }
 
-function init3D(){
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0b0f18);
+    /* Viewport */
+    .viewport{ position:relative; overflow:hidden; min-height:0; }
+    #stage{ position:absolute; inset:0; }
+    canvas{ display:block; }
+    .hint-fab{ position:absolute; left:12px; bottom:12px; z-index:6; width:40px; height:40px; border-radius:999px; background:#0b1220cc; border:1px solid var(--border); color:var(--muted); display:flex; align-items:center; justify-content:center; font-weight:900; cursor:pointer }
+    .hint{ position:absolute; left:60px; right:12px; bottom:12px; background:#0b1220cc; border:1px solid var(--border); border-radius:10px; padding:10px; color:var(--muted); font-size:12px; transition:.2s; }
+    .hint.hidden{ opacity:0; transform:translateY(8px); pointer-events:none }
+    .status-badge{ position:absolute; top:12px; right:12px; background:#0b1220cc; border:1px solid var(--border); border-radius:10px; padding:6px 10px; font-size:12px; color:var(--muted); display:flex; gap:8px; z-index:6 }
 
-  camera = new THREE.PerspectiveCamera(50, 16/9, 0.01, 200);
-  camera.position.set(1.8, 1.2, 2.4);
+    /* Right properties */
+    .kv{display:grid;grid-template-columns:140px 1fr;gap:8px;align-items:center;margin-bottom:8px}
+    .input,.select{ width:100%; background:#0f1420; border:1px solid var(--border); color:var(--text); padding:8px; border-radius:8px }
+    .toolbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+    .toolbtn{background:#0f1626;border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:8px;cursor:pointer;font-weight:700}
+    .toolbtn.active{ outline:2px solid var(--accent) }
+    .section{border:1px solid var(--border);border-radius:10px;background:var(--panel2);margin-bottom:10px;overflow:hidden}
+    .section .header{padding:10px 12px;font-weight:800;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+    .section .body{padding:10px}
 
-  renderer = new THREE.WebGLRenderer({antialias:true, alpha:false, powerPreference:'low-power'});
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-  renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.8));
-  $("#canvasWrap").appendChild(renderer.domElement);
+    .toast{position:fixed;bottom:14px;right:14px;background:#0b1220;border:1px solid var(--border);padding:10px 12px;border-radius:10px;display:none;z-index:99}
+  </style>
 
-  const amb = new THREE.HemisphereLight(0xffffff, 0x223355, 1.0); scene.add(amb);
-  const dir = new THREE.DirectionalLight(0xffffff, 1.15); dir.position.set(3,5,2); scene.add(dir);
-
-  orbit = new OrbitControls(camera, renderer.domElement);
-  orbit.enableDamping = true;
-
-  gizmo = new TransformControls(camera, renderer.domElement);
-  gizmo.addEventListener('dragging-changed', e=> orbit.enabled = !e.value);
-  scene.add(gizmo);
-
-  // gut sichtbares Grid + Axes
-  grid = new THREE.GridHelper(10, 20, 0x88aaff, 0x5577ff);
-  grid.material.transparent = true; grid.material.opacity = 0.9;
-  scene.add(grid);
-  axes = new THREE.AxesHelper(0.5); axes.renderOrder = 1; scene.add(axes);
-
-  // Drag & Drop
-  const vp=$("#viewport"), hint=$("#dropHint");
-  ['dragenter','dragover'].forEach(ev=> vp.addEventListener(ev, e=>{ e.preventDefault(); hint.style.display='flex'; }));
-  ['dragleave','drop'].forEach(ev=> vp.addEventListener(ev, e=>{ e.preventDefault(); hint.style.display='none'; }));
-  vp.addEventListener('drop', async (e)=>{ const f=e.dataTransfer.files?.[0]; if(f) await loadFromFile(f); });
-
-  animate();
-}
-function resize(){ const el=$("#viewport"); const w=el.clientWidth, h=el.clientHeight; renderer.setSize(w,h); camera.aspect=w/h; camera.updateProjectionMatrix(); }
-
-const loader = new GLTFLoader();
-
-const readFileDual = (file)=> new Promise((resolve,reject)=>{
-  const r1=new FileReader(), r2=new FileReader();
-  r1.onload=()=>{ const blob=new Blob([r1.result]); const blobUrl=URL.createObjectURL(blob);
-    r2.onload=()=> resolve({blobUrl, dataUrl:r2.result});
-    r2.onerror=reject; r2.readAsDataURL(file);
-  };
-  r1.onerror=reject; r1.readAsArrayBuffer(file);
-});
-
-async function loadFromFile(file){
-  try{
-    status('Lade Datei…'); const {blobUrl, dataUrl} = await readFileDual(file);
-    await loadFromSrc(blobUrl, file.name);
-    publishSrc = dataUrl; // für Publish (Data-URL)
-  }catch(err){ showErr('Datei konnte nicht geladen werden: '+err.message); }
-}
-async function loadFromURL(url){
-  publishSrc = url; // Viewer lädt per URL (CORS nötig)
-  await loadFromSrc(url);
-}
-
-async function loadFromSrc(src, niceName=''){
-  status('Lade Modell…');
-  if (model){ gizmo.detach(); scene.remove(model); disposeObject(model); }
-  if (mixer){ mixer.stopAllAction(); mixer.uncacheRoot(model); mixer=null; }
-  clips=[]; setAnimUI([]);
-
-  return new Promise((resolve,reject)=>{
-    loader.load(src, gltf=>{
-      const root = gltf.scene || gltf.scenes?.[0];
-      if(!root){ reject(new Error('Kein Scene-Root im GLTF')); return; }
-      model = root;
-      model.position.set(0,0,0);
-      model.rotation.set(0,0,0);
-      model.scale.set(1,1,1);
-      scene.add(model);
-      gizmo.attach(model);
-
-      const name = niceName || (typeof src==='string' ? src.split('/').pop() : 'Modell');
-      $("#modelName").textContent = name;
-
-      clips = gltf.animations||[];
-      if (clips.length) mixer = new THREE.AnimationMixer(model);
-      setAnimUI(clips.map(c=>c.name||''));
-      status(`${name} geladen · ${clips.length} Animation(en)`);
-      syncTransformInputsFromModel();
-      resolve();
-    }, undefined, err=>{ showErr('Laden fehlgeschlagen: '+err.message); reject(err); });
-  });
-}
-
-function disposeObject(root){
-  root.traverse(o=>{
-    if (o.geometry) o.geometry.dispose();
-    if (o.material){ const m=o.material; Array.isArray(m) ? m.forEach(x=>x.dispose()) : m.dispose(); }
-  });
-}
-
-function setAnimUI(names){
-  const sel=$("#anim-name"); const keep=sel.value;
-  sel.innerHTML='<option value="*">alle</option>';
-  names.forEach(n=> sel.insertAdjacentHTML('beforeend', `<option value="${n}">${n||'(unbenannt)'}</option>`));
-  if ([...sel.options].some(o=>o.value===keep)) sel.value=keep;
-}
-
-function playSelection(){
-  if (!mixer || !clips.length) return;
-  mixer.stopAllAction();
-  mixer.timeScale = parseFloat($("#anim-speed").value||'1')||1;
-  const loop=$("#anim-loop").checked;
-  const pick=$("#anim-name").value;
-  let acts=[];
-  if (pick==='*'){ acts = clips.map(c=>mixer.clipAction(c)); }
-  else { const c = clips.find(c=>c.name===pick) || clips[0]; if (c) acts=[mixer.clipAction(c)]; }
-  acts.forEach(a=>{ a.clampWhenFinished=!loop; a.setLoop(loop?THREE.LoopRepeat:THREE.LoopOnce, Infinity).play(); });
-}
-function pauseAll(){ if (mixer){ mixer.timeScale = 0; } }
-
-$("#demo-load").onclick = async ()=>{ await loadFromURL('https://modelviewer.dev/shared-assets/models/Astronaut.glb'); };
-$("#btn-load").onclick = async ()=>{
-  const f=$("#f-file").files[0]; const url=($("#f-url").value||'').trim();
-  if (f) await loadFromFile(f);
-  else if (url) await loadFromURL(url);
-  else alert('Datei auswählen oder URL eintragen.');
-};
-$("#btn-probe").onclick = async ()=>{
-  if (!publishSrc){ const f=$("#f-file").files[0]; const url=($("#f-url").value||'').trim();
-    if (f) await loadFromFile(f); else if (url) await loadFromURL(url); else return alert('Datei oder URL angeben.');
-  } else { setAnimUI(clips.map(c=>c.name||'')); }
-};
-
-$("#anim-play").onclick = playSelection;
-$("#anim-pause").onclick = pauseAll;
-$("#anim-name").onchange = ()=>{ if(mixer) playSelection(); };
-$("#anim-speed").onchange = ()=>{ if(mixer) playSelection(); };
-$("#anim-loop").onchange = ()=>{ if(mixer) playSelection(); };
-
-document.querySelectorAll('[data-gizmo]').forEach(btn=> btn.onclick = ()=> gizmo.setMode(btn.dataset.gizmo));
-
-$("#grid-toggle").onchange = ()=>{ const v=$("#grid-toggle").checked; grid.visible = v; axes.visible = v; };
-$("#cam-reset").onclick = ()=>{ camera.position.set(1.8,1.2,2.4); orbit.target.set(0,0,0); orbit.update(); };
-
-function syncTransformInputsFromModel(){
-  if (!model) return;
-  $("#p-x").value = model.position.x.toFixed(2);
-  $("#p-y").value = model.position.y.toFixed(2);
-  $("#p-z").value = model.position.z.toFixed(2);
-  $("#r-x").value = THREE.MathUtils.radToDeg(model.rotation.x).toFixed(0);
-  $("#r-y").value = THREE.MathUtils.radToDeg(model.rotation.y).toFixed(0);
-  $("#r-z").value = THREE.MathUtils.radToDeg(model.rotation.z).toFixed(0);
-  $("#s-uniform").value = model.scale.x.toFixed(2);
-}
-["p-x","p-y","p-z","r-x","r-y","r-z","s-uniform"].forEach(id=>{
-  $("#"+id).addEventListener('change', ()=>{
-    if (!model) return;
-    const px=parseFloat($("#p-x").value||'0'), py=parseFloat($("#p-y").value||'0'), pz=parseFloat($("#p-z").value||'0');
-    const rx=THREE.MathUtils.degToRad(parseFloat($("#r-x").value||'0'));
-    const ry=THREE.MathUtils.degToRad(parseFloat($("#r-y").value||'0'));
-    const rz=THREE.MathUtils.degToRad(parseFloat($("#r-z").value||'0'));
-    const s=parseFloat($("#s-uniform").value||'1');
-    model.position.set(px,py,pz); model.rotation.set(rx,ry,rz); model.scale.set(s,s,s);
-  });
-});
-gizmo.addEventListener('objectChange', syncTransformInputsFromModel);
-
-// Publish
-function encodeHash(obj){ const json=JSON.stringify(obj); return '#'+btoa(unescape(encodeURIComponent(json))); }
-const fileToDataURL = (file)=> new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file); });
-
-async function buildPayload(){
-  if (!publishSrc || !model) throw new Error('Kein Modell im Viewport. Lade zuerst ein GLB/GLTF.');
-  const s=model.scale.x;
-  const pos=[model.position.x, model.position.y, model.position.z];
-  const rot=[THREE.MathUtils.radToDeg(model.rotation.x), THREE.MathUtils.radToDeg(model.rotation.y), THREE.MathUtils.radToDeg(model.rotation.z)];
-  const payload = {
-    src: publishSrc, scale:s, position:pos, rotationDeg:rot,
-    animSpeed: parseFloat($("#anim-speed").value||'1')||1,
-    animLoop: $("#anim-loop").checked
-  };
-  const pick=$("#anim-name").value;
-  if (pick==='*') payload.animation='*'; else payload.animName=pick;
-  return payload;
-}
-async function makeSurfaceLink(){ const p=await buildPayload(); p.mode='surface'; return ($("#pub-viewer-url").value||'./viewer.html') + encodeHash(p); }
-async function makeImageLink(){
-  const p=await buildPayload(); p.mode='image';
-  const f=$("#pub-image-file").files[0]; if(!f) throw new Error('Kein Trigger-Bild gewählt.');
-  p.image = await fileToDataURL(f); p.imageWidthMeters = Number($("#pub-image-width").value||'0.2')||0.2;
-  return ($("#pub-viewer-url").value||'./viewer.html') + encodeHash(p);
-}
-
-// QR
-const QR_URL = "https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js";
-function ensureQR(){ return new Promise(res=>{ if (window.QRCode) return res(); const s=document.createElement('script'); s.src=QR_URL; s.onload=res; s.onerror=res; document.head.appendChild(s); }); }
-async function drawQR(text){
-  await ensureQR(); const cnv=$("#pub-qr"); if(!window.QRCode||!cnv){cnv.hidden=true;return;}
-  const dataUrl = await window.QRCode.toDataURL(text,{errorCorrectionLevel:'L',width:280,margin:1});
-  const img=new Image(); img.onload=()=>{cnv.width=img.width; cnv.height=img.height; const ctx=cnv.getContext('2d'); ctx.clearRect(0,0,cnv.width,cnv.height); ctx.drawImage(img,0,0);}; img.src=dataUrl;
-}
-
-// Publish UI
-$("#pub-toggle").onclick = ()=> $("#pub-panel").style.display = ($("#pub-panel").style.display==='block'?'none':'block');
-$("#pub-close").onclick = ()=> $("#pub-panel").style.display='none';
-$("#pub-surface").onclick = async ()=>{ try{ const link=await makeSurfaceLink(); $("#pub-link").value=link; drawQR(link);}catch(e){ showErr(e.message);} };
-$("#pub-image").onclick = async ()=>{ try{ const link=await makeImageLink(); $("#pub-link").value=link; drawQR(link);}catch(e){ showErr(e.message);} };
-
-// Loop
-const clock=new THREE.Clock();
-function animate(){
-  requestAnimationFrame(animate);
-  const dt=clock.getDelta();
-  if (mixer && mixer.timeScale!==0) mixer.update(dt);
-  orbit.update();
-  renderer.render(scene,camera);
-}
-</script>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
 </head>
 <body>
-  <header class="top">
-    <b>AR Studio – Editor</b>
-    <span class="muted">Viewport + Animation + Publish</span>
-    <span style="flex:1"></span>
-    <span class="muted small">Tipp: in Blender als <b>GLB</b> exportieren (bin+Texturen eingebettet).</span>
-  </header>
+  <div class="top">
+    <div class="brand">WebAR Editor <span class="ver">v2.2.1</span></div>
+    <span id="projName" class="projname" title="Projektname (Doppelklick zum Umbenennen)">Unbenanntes Projekt</span>
 
-  <main class="app">
-    <aside class="sidebar">
-      <div class="field">
-        <label class="small">GLB/GLTF Datei</label>
-        <input id="f-file" type="file" accept=".glb,.gltf"/>
-        <button id="demo-load" style="margin-top:6px">Demo laden (Astronaut)</button>
+    <div class="menu" id="projectMenu">
+      <button id="btn-project-menu" class="menubtn" aria-haspopup="true" aria-expanded="false">Projekt ▾</button>
+      <div class="menu-pop" id="projectMenuPop" role="menu">
+        <button id="btn-new" class="menuitem" role="menuitem">+ Neues Projekt…</button>
+        <label class="menuitem" role="menuitem">Projekt öffnen
+          <input id="file-project" type="file" accept=".webar,.json">
+        </label>
+        <button id="btn-save" class="menuitem" role="menuitem">Projekt speichern</button>
+        <button id="btn-save-as" class="menuitem" role="menuitem">Speichern unter…</button>
       </div>
-      <div class="field">
-        <label class="small">oder GLB/GLTF URL</label>
-        <input id="f-url" type="text" placeholder="https://…/model.glb"/>
-        <div class="row">
-          <button id="btn-load">Laden</button>
-          <button id="btn-probe">Animationen erkennen</button>
-        </div>
-        <div class="small muted">Extern: CORS muss <code>Access-Control-Allow-Origin: *</code> setzen.</div>
-      </div>
-
-      <div class="hline"></div>
-
-      <div class="field">
-        <label class="small">Animation</label>
-        <select id="anim-name"><option value="*">alle</option></select>
-        <div class="row">
-          <button id="anim-play">Play</button>
-          <button id="anim-pause">Pause</button>
-          <label class="row" style="gap:6px"><span class="small">Speed</span><input id="anim-speed" type="number" step="0.1" value="1.0"/></label>
-        </div>
-        <label class="row" style="gap:8px;align-items:center"><input id="anim-loop" type="checkbox" checked/><span class="small">Loop</span></label>
-      </div>
-
-      <div class="hline"></div>
-
-      <div class="field">
-        <label class="small">Gizmo</label>
-        <div class="row">
-          <button data-gizmo="translate">Move</button>
-          <button data-gizmo="rotate">Rotate</button>
-          <button data-gizmo="scale">Scale</button>
-        </div>
-      </div>
-
-      <div class="field">
-        <label class="small">Transform</label>
-        <div class="row"><label class="small" style="width:40px">Pos</label>
-          <input id="p-x" type="number" step="0.01" value="0"><input id="p-y" type="number" step="0.01" value="0"><input id="p-z" type="number" step="0.01" value="0">
-        </div>
-        <div class="row"><label class="small" style="width:40px">Rot°</label>
-          <input id="r-x" type="number" step="1" value="0"><input id="r-y" type="number" step="1" value="0"><input id="r-z" type="number" step="1" value="0">
-        </div>
-        <div class="row"><label class="small" style="width:40px">Scale</label>
-          <input id="s-uniform" type="number" step="0.01" value="1">
-        </div>
-      </div>
-
-      <div class="hline"></div>
-
-      <div class="field">
-        <label class="row" style="gap:8px;align-items:center"><input id="grid-toggle" type="checkbox" checked><span class="small">Grid & Achsen anzeigen</span></label>
-        <div class="row"><button id="cam-reset">Kamera reset</button></div>
-      </div>
-
-      <div class="hline"></div>
-
-      <div class="small muted">Publish unten rechts – erzeugt Links für Surface / Image AR.</div>
-    </aside>
-
-    <section id="viewport" aria-label="3D Viewport">
-      <div class="toolbar"><span class="chip" id="modelName">Kein Modell</span></div>
-      <div id="canvasWrap"></div>
-      <div id="dropHint">GLB hierher ziehen …</div>
-      <div id="status" class="small muted">Bereit…</div>
-    </section>
-  </main>
-
-  <!-- Publish Panel -->
-  <button id="pub-toggle" title="Publish (Surface/Image AR)">Publish</button>
-  <aside id="pub-panel" role="dialog" aria-modal="false" aria-label="Publish">
-    <header>
-      <b>Publish – WebAR Link</b>
-      <div style="flex:1"></div>
-      <button id="pub-close" title="Schließen" style="padding:6px 8px;border-radius:8px">✕</button>
-    </header>
-    <div class="body">
-      <label>Viewer URL
-        <input id="pub-viewer-url" type="text" value="../viewer.html" placeholder="./viewer.html">
-      </label>
-      <div style="border:1px solid var(--border);border-radius:12px;padding:10px">
-        <h4 style="margin:0 0 8px 0;font-size:13px;color:#cbd5e1">Quelle wählen</h4>
-        <div class="row"><button id="pub-surface">Surface-AR Link</button><button id="pub-image">Image-AR Link</button></div>
-        <div class="row" style="margin-top:8px">
-          <input id="pub-image-file" type="file" accept="image/*">
-          <label>Bildbreite (m)<input id="pub-image-width" type="number" step="0.01" min="0.05" value="0.20"></label>
-        </div>
-      </div>
-      <label>Link <input id="pub-link" type="text" readonly placeholder="Hier erscheint der Link…"></label>
-      <canvas id="pub-qr" width="0" height="0"></canvas>
-      <div class="small">Scanne den QR-Code oder kopiere den Link (HTTPS!).</div>
     </div>
-  </aside>
 
-  <div id="err"></div>
+    <label class="btn" style="margin-left:8px">Objekt import (.glb)
+      <input id="file-glb" type="file" accept=".glb" multiple style="display:none">
+    </label>
+
+    <div class="sp"></div>
+  </div>
+
+  <div class="wrap">
+    <!-- Scene tree -->
+    <div class="panel">
+      <h3>Szenenbaum</h3>
+      <div id="sceneList" class="content"><div class="muted">Noch keine Objekte</div></div>
+    </div>
+
+    <!-- Viewport -->
+    <div class="viewport">
+      <div id="stage"></div>
+      <div id="vpStatus" class="status-badge" aria-live="polite">
+        <span id="vp-pill-space">Space: Local</span>
+        <span id="vp-pill-snap">Snap: Aus</span>
+      </div>
+      <button id="hintFab" class="hint-fab" aria-expanded="false" title="Hinweise">i</button>
+      <div class="hint hidden">LMB drehen · Rad zoomen · RMB/Shift+LMB schwenken · Klick = Auswahl · W/E/R Move/Rotate/Scale · Q Local/World · D Duplizieren · F Drop-to-Floor · Entf Löschen</div>
+    </div>
+
+    <!-- Properties -->
+    <div class="panel">
+      <h3>Eigenschaften</h3>
+      <div class="content">
+        <div class="section">
+          <div class="header">🔧 Transform</div>
+          <div class="body">
+            <div class="toolbar">
+              <select id="tool-mode" class="select" style="max-width:180px">
+                <option value="translate">Verschieben (W)</option>
+                <option value="rotate">Drehen (E)</option>
+                <option value="scale">Skalieren (R)</option>
+              </select>
+              <span style="flex:1"></span>
+              <button id="space-local" class="toolbtn">Space: Local</button>
+              <button id="space-world" class="toolbtn">Space: World</button>
+            </div>
+
+            <div class="toolbar">
+              <label class="toolbtn" style="display:inline-flex;align-items:center;gap:6px"><input id="snapChk" type="checkbox"> Snap aktiv</label>
+              <label>Trans Snap (m)
+                <select id="transSnapSel" class="select" style="width:120px">
+                  <option value="">Off</option>
+                  <option value="0.1" selected>0.1</option>
+                  <option value="0.25">0.25</option>
+                  <option value="0.5">0.5</option>
+                  <option value="1">1.0</option>
+                </select>
+              </label>
+              <label>Rot Snap (°)
+                <select id="rotSnapSel" class="select" style="width:120px">
+                  <option value="">Off</option>
+                  <option value="15" selected>15</option>
+                  <option value="30">30</option>
+                  <option value="45">45</option>
+                  <option value="90">90</option>
+                </select>
+              </label>
+              <label>Scale Snap
+                <select id="scaleSnapSel" class="select" style="width:120px">
+                  <option value="">Off</option>
+                  <option value="0.1" selected>0.1</option>
+                  <option value="0.25">0.25</option>
+                  <option value="0.5">0.5</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="toolbar">
+              <button id="btn-duplicate" class="toolbtn">Duplizieren (D)</button>
+              <button id="btn-floor" class="toolbtn">Drop to Floor (F)</button>
+              <button id="btn-delete" class="toolbtn">Löschen (Entf)</button>
+            </div>
+
+            <div class="kv"><div>Name</div><input id="prop-name" class="input" placeholder="Objektname"></div>
+            <div class="kv"><div>Pos X</div><input id="posx" class="input" type="number" step="0.01"></div>
+            <div class="kv"><div>Pos Y</div><input id="posy" class="input" type="number" step="0.01"></div>
+            <div class="kv"><div>Pos Z</div><input id="posz" class="input" type="number" step="0.01"></div>
+            <div class="kv"><div>Rot X°</div><input id="rotx" class="input" type="number" step="1"></div>
+            <div class="kv"><div>Rot Y°</div><input id="roty" class="input" type="number" step="1"></div>
+            <div class="kv"><div>Rot Z°</div><input id="rotz" class="input" type="number" step="1"></div>
+            <div class="kv"><div>Scale</div><input id="scale" class="input" type="number" step="0.01"></div>
+            <button id="btn-apply" class="btn" style="margin-top:8px">Übernehmen</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="header">🎞️ Animation</div>
+          <div class="body">
+            <div class="kv"><div>Clip</div>
+              <select id="anim-clip" class="select"></select>
+            </div>
+            <div class="toolbar">
+              <button id="anim-play" class="toolbtn">Play</button>
+              <button id="anim-pause" class="toolbtn">Pause</button>
+              <button id="anim-stop" class="toolbtn">Stop</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="header">⚙️ Szene & Ansicht</div>
+          <div class="body">
+            <div class="kv"><div>Raumgröße</div><input id="roomSize" class="input" type="number" step="1" value="24"></div>
+            <div class="kv"><div>Auto-Fit Größe</div><input id="fitSize" class="input" type="number" step="0.1" value="1.5"></div>
+            <div class="kv"><div>Grid immer oben</div><label style="display:inline-flex;align-items:center;gap:8px"><input id="gridOnTop" type="checkbox"> Aktiv</label></div>
+            <div class="toolbar">
+              <button id="view-iso" class="toolbtn">Iso</button>
+              <button id="view-front" class="toolbtn">Front</button>
+              <button id="view-side" class="toolbtn">Seite</button>
+              <button id="view-top" class="toolbtn">Top</button>
+              <button id="view-reset" class="toolbtn">Kamera zurücksetzen</button>
+              <button id="btn-snap" class="toolbtn">Screenshot</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { TransformControls } from 'three/addons/controls/TransformControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+    import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+
+    const $ = s => document.querySelector(s);
+    const toastEl = $('#toast');
+    const toast = m => { toastEl.textContent=m; toastEl.style.display='block'; setTimeout(()=>toastEl.style.display='none',1800); };
+
+    // --- Project state ---
+    let projectName = 'Unbenanntes Projekt';
+    let isDirty = false; let fileHandle = null;
+    function setProjectName(name){ projectName = (name||'').trim()||'Unbenanntes Projekt'; $('#projName').textContent = projectName + (isDirty?' *':''); document.title = 'WebAR Editor v2.2.1 — '+projectName+(isDirty?' *':''); }
+    function setDirty(flag=true){ isDirty=!!flag; $('#projName').textContent = projectName + (isDirty?' *':''); document.title = 'WebAR Editor v2.2.1 — '+projectName+(isDirty?' *':''); }
+    window.addEventListener('beforeunload', (e)=>{ if(isDirty){ e.preventDefault(); e.returnValue=''; } });
+
+    // --- Menu ---
+    (function(){
+      const menu = $('#projectMenu'); const btn = $('#btn-project-menu');
+      function close(){ menu.classList.remove('open'); btn.setAttribute('aria-expanded','false'); }
+      btn.addEventListener('click', (e)=>{ e.stopPropagation(); menu.classList.toggle('open'); btn.setAttribute('aria-expanded', menu.classList.contains('open') ? 'true' : 'false'); });
+      document.addEventListener('click', (e)=>{ if(!menu.contains(e.target)) close(); });
+    })();
+
+    // --- Three setup ---
+    const stage = $('#stage');
+    const renderer = new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    stage.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene(); scene.background = new THREE.Color('#0b1323');
+    const camera = new THREE.PerspectiveCamera(30,1,0.01,1000); camera.position.set(15,6,15);
+
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x334466, 0.7); scene.add(hemi);
+    const dir  = new THREE.DirectionalLight(0xffffff, 1.0); dir.position.set(2,4,2); scene.add(dir);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true; controls.enablePan = true; controls.minDistance=0.2; controls.maxDistance=400; controls.target.set(1,0,0); controls.update();
+
+    const tcontrols = new TransformControls(camera, renderer.domElement);
+    tcontrols.addEventListener('dragging-changed', e => { controls.enabled = !e.value; });
+    scene.add(tcontrols);
+
+    // Grid
+    let gridLocal, gridFar, axisXLine, axisZLine;
+    function disposeObj(o){ if(!o) return; o.geometry?.dispose?.(); if(o.material){ if(Array.isArray(o.material)) o.material.forEach(m=>m.dispose?.()); else o.material.dispose?.(); } }
+    function buildRoom(size=24){
+      [gridLocal, gridFar, axisXLine, axisZLine].forEach(o=>{ if(o){ scene.remove(o); disposeObj(o); } });
+      gridLocal = gridFar = axisXLine = axisZLine = null;
+      const L = Math.max(2,size), div = Math.max(10, Math.round(L));
+      gridLocal = new THREE.GridHelper(L, div, 0x6ea0ff, 0x6ea0ff);
+      gridLocal.material.transparent = true; gridLocal.material.opacity=0.60; gridLocal.material.depthTest=true; gridLocal.material.depthWrite=false; gridLocal.position.y=0.001; gridLocal.raycast=()=>{}; scene.add(gridLocal);
+      const BIG=2000; gridFar = new THREE.GridHelper(BIG,BIG,0x263b5d,0x263b5d); gridFar.material.transparent=true; gridFar.material.opacity=0.22; gridFar.material.depthTest=true; gridFar.material.depthWrite=false; gridFar.position.y=-0.001; gridFar.raycast=()=>{}; scene.add(gridFar);
+      const y=0.002; const mat = new THREE.LineBasicMaterial({ color:0x60a5fa, transparent:true, opacity:1.0 });
+      let g = new THREE.BufferGeometry().setFromPoints([ new THREE.Vector3(-L/2, y, 0), new THREE.Vector3(L/2, y, 0) ]);
+      axisXLine = new THREE.Line(g, mat.clone()); axisXLine.raycast=()=>{}; scene.add(axisXLine);
+      g = new THREE.BufferGeometry().setFromPoints([ new THREE.Vector3(0, y, -L/2), new THREE.Vector3(0, y, L/2) ]);
+      axisZLine = new THREE.Line(g, mat.clone()); axisZLine.raycast=()=>{}; scene.add(axisZLine);
+      updateGridOnTop();
+    }
+    function updateGridOnTop(){
+      const on = $('#gridOnTop')?.checked; const setDepth=(mat,val)=>{ if(!mat) return; if(Array.isArray(mat)) mat.forEach(m=>{ if(m) m.depthTest = val; }); else mat.depthTest = val; };
+      [gridLocal, axisXLine, axisZLine].forEach(o=>{ if(!o) return; if(o.material) setDepth(o.material, !on); o.renderOrder = on ? 999 : 0; });
+      if(gridLocal){ const m=gridLocal.material; if(Array.isArray(m)) m.forEach(mm=> mm.opacity = on?0.85:0.60); else m.opacity = on?0.85:0.60; }
+    }
+    $('#gridOnTop').addEventListener('change', updateGridOnTop);
+
+    // Resize
+    function onResize(){ const r = stage.getBoundingClientRect(); const w=Math.max(1,r.width), h=Math.max(1,r.height); renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+    new ResizeObserver(onResize).observe(stage); onResize();
+
+    // State
+    const state = { objects:[], selectedId:null };
+    const uid = ()=> 'o_'+Math.random().toString(36).slice(2,9);
+
+    // GLTF loader
+    const gltfLoader = new GLTFLoader(); const draco = new DRACOLoader(); draco.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/'); gltfLoader.setDRACOLoader(draco);
+
+    // Scene list
+    function rebuildList(){
+      const root = $('#sceneList'); root.innerHTML='';
+      if(!state.objects.length){ root.innerHTML='<div class="muted">Noch keine Objekte</div>'; return; }
+      state.objects.forEach(o=>{
+        const row = document.createElement('div'); row.className='row'+(o.id===state.selectedId?' sel':'');
+        const eye = document.createElement('button'); eye.className='iconbtn eye'; eye.textContent = o.hidden?'🚫':'👁️'; eye.title = o.hidden?'Einblenden':'Ausblenden'; eye.classList.toggle('dim', o.hidden);
+        const lock = document.createElement('button'); lock.className='iconbtn lock'; lock.textContent = o.locked?'🔒':'🔓'; lock.title = o.locked?'Entsperren':'Sperren'; lock.classList.toggle('dim', o.locked);
+        const tab = document.createElement('button'); tab.className='sname'; tab.textContent = o.name; tab.title='Auswählen';
+        const del = document.createElement('button'); del.className='iconbtn'; del.textContent='✕'; del.title='Löschen';
+        row.appendChild(eye); row.appendChild(tab); row.appendChild(lock); row.appendChild(del); root.appendChild(row);
+        eye.addEventListener('click', ()=>{ o.hidden=!o.hidden; if(o.group) o.group.visible=!o.hidden; rebuildList(); });
+        lock.addEventListener('click', ()=>{ o.locked=!o.locked; rebuildList(); });
+        tab.addEventListener('click', ()=> selectObject(o.id));
+        del.addEventListener('click', ()=> deleteObject(o.id));
+      });
+    }
+
+    function selectObject(id){
+      state.selectedId = id || null; tcontrols.detach();
+      state.objects.forEach(o=>{ if(o.bbox) o.bbox.visible = (o.id===id); });
+      const rec = state.objects.find(o=>o.id===id);
+      if(rec){ tcontrols.attach(rec.group); fillPropInputs(rec); populateAnimUI(rec); }
+      rebuildList();
+    }
+
+    function fillPropInputs(rec){
+      $('#prop-name').value = rec.name||''; const p=rec.group.position, r=rec.group.rotation, s=rec.group.scale.x;
+      $('#posx').value=p.x.toFixed(3); $('#posy').value=p.y.toFixed(3); $('#posz').value=p.z.toFixed(3);
+      $('#rotx').value=THREE.MathUtils.radToDeg(r.x).toFixed(1); $('#roty').value=THREE.MathUtils.radToDeg(r.y).toFixed(1); $('#rotz').value=THREE.MathUtils.radToDeg(r.z).toFixed(1);
+      $('#scale').value=s.toFixed(3);
+    }
+
+    function deleteObject(id){ const i = state.objects.findIndex(x=>x.id===id); if(i<0) return; const rec = state.objects[i]; if(tcontrols.object===rec.group) tcontrols.detach(); scene.remove(rec.group); if(rec.bbox) scene.remove(rec.bbox); state.objects.splice(i,1); if(state.selectedId===id) state.selectedId=null; rebuildList(); setDirty(true); }
+
+    // Click select
+    const raycaster = new THREE.Raycaster(); const mouse = new THREE.Vector2();
+    renderer.domElement.addEventListener('pointerdown', (e)=>{
+      if(tcontrols.dragging) return; const rect=renderer.domElement.getBoundingClientRect();
+      mouse.x=((e.clientX-rect.left)/rect.width)*2-1; mouse.y=-((e.clientY-rect.top)/rect.height)*2+1;
+      raycaster.setFromCamera(mouse, camera);
+      const targets = state.objects.filter(o=>!o.hidden && !o.locked).map(o=>o.group);
+      const hits = raycaster.intersectObjects(targets, true);
+      if(hits.length){ let obj3=hits[0].object; while(obj3 && obj3.parent && obj3.parent!==scene) obj3=obj3.parent; const rec=state.objects.find(o=>o.group===obj3); if(rec) selectObject(rec.id); }
+    });
+
+    // Gizmo mode / space / snap
+    function updateTool(){ const m = $('#tool-mode').value; tcontrols.setMode(m); }
+    $('#tool-mode').addEventListener('change', updateTool);
+    function setSpace(space){ tcontrols.setSpace(space==='world'?'world':'local'); $('#vp-pill-space').textContent = 'Space: ' + (space==='world'?'World':'Local'); }
+    $('#space-local').addEventListener('click', ()=> setSpace('local'));
+    $('#space-world').addEventListener('click', ()=> setSpace('world'));
+    function getSnap(){ const on=$('#snapChk').checked; const ts=$('#transSnapSel').value, rs=$('#rotSnapSel').value, ss=$('#scaleSnapSel').value; return { t:on&&ts?parseFloat(ts):null, r:on&&rs?THREE.MathUtils.degToRad(parseFloat(rs)):null, s:on&&ss?parseFloat(ss):null } }
+    function applySnap(){ const v=getSnap(); tcontrols.setTranslationSnap(v.t); tcontrols.setRotationSnap(v.r); tcontrols.setScaleSnap(v.s); $('#vp-pill-snap').textContent='Snap: '+($('#snapChk').checked?'An':'Aus'); }
+    ['snapChk','transSnapSel','rotSnapSel','scaleSnapSel'].forEach(id=> $('#'+id).addEventListener('change', applySnap));
+
+    // Add GLB
+    $('#file-glb').addEventListener('change', (e)=>{ const files=[...e.target.files||[]]; files.forEach(addGLB); e.target.value=''; });
+    stage.addEventListener('dragover', e=>{ e.preventDefault(); });
+    stage.addEventListener('drop', e=>{ e.preventDefault(); const files=[...e.dataTransfer.files].filter(f=>/\.glb$/i.test(f.name)); files.forEach(addGLB); });
+
+    async function createGroupedFromURL(url, name){
+      const gltf = await gltfLoader.loadAsync(url);
+      const root = gltf.scene || gltf.scenes?.[0]; if(!root) throw new Error('GLB ohne Szene');
+      const group = new THREE.Group(); group.name = name||'Objekt'; group.add(root); scene.add(group);
+      // center pivot: move children by world center
+      const worldBox = new THREE.Box3().setFromObject(group); const worldCenter = new THREE.Vector3(); worldBox.getCenter(worldCenter);
+      group.children.forEach(c => { c.position.sub(worldCenter); }); group.position.add(worldCenter);
+      return {group, animations:gltf.animations||[]};
+    }
+
+    async function addGLB(file){
+      const id = uid(); const url = URL.createObjectURL(file);
+      try{
+        const {group, animations} = await createGroupedFromURL(url, (file.name||'Objekt').replace(/\.(glb|gltf)$/i,''));
+        // auto-fit
+        const fit = parseFloat($('#fitSize').value)||1.5; const box = new THREE.Box3().setFromObject(group); const size = new THREE.Vector3(); box.getSize(size); const maxDim=Math.max(size.x,size.y,size.z)||1; const uniS = fit/maxDim; group.scale.setScalar(uniS);
+        // bbox helper (blue)
+        const bbox = new THREE.Box3().setFromObject(group); const helper = new THREE.Box3Helper(bbox, 0x3399ff); helper.visible=false; helper.raycast=()=>{}; scene.add(helper);
+        const rec = { id, name:group.name, file, url, group, bbox:helper, hidden:false, locked:false, animations, mixer:null, clips:[] };
+        // setup animations list
+        if(animations && animations.length){
+          rec.mixer = new THREE.AnimationMixer(group);
+          rec.clips = animations.map((c,i)=> ({ name:c.name||('Clip '+(i+1)), clip:c }));
+        }
+        state.objects.push(rec); selectObject(id); rebuildList(); toast('Importiert: '+group.name); setDirty(true);
+      }catch(err){ console.error(err); toast('Fehler beim Import: '+(file?.name||'')); URL.revokeObjectURL(url); }
+    }
+
+    // Duplicate (same size)
+    function duplicateSelected(){ const src = state.objects.find(o=>o.id===state.selectedId); if(!src) return; const id=uid();
+      const clonedRoot = SkeletonUtils.clone(src.group.children[0]||src.group); // clone model only
+      const group = new THREE.Group(); group.name = (src.name||'Objekt')+' (Kopie)'; group.add(clonedRoot);
+      // keep exact transform
+      group.position.copy(src.group.position); group.quaternion.copy(src.group.quaternion); group.scale.copy(src.group.scale);
+      scene.add(group);
+      const bbox = new THREE.Box3().setFromObject(group); const helper = new THREE.Box3Helper(bbox, 0x3399ff); helper.visible=false; helper.raycast=()=>{}; scene.add(helper);
+      const rec = { id, name:group.name, file:src.file||null, url:null, group, bbox:helper, hidden:false, locked:false, animations:src.animations||[], mixer:null, clips:[] };
+      if(rec.animations?.length){ rec.mixer = new THREE.AnimationMixer(group); rec.clips = rec.animations.map((c,i)=>({name:c.name||('Clip '+(i+1)), clip:c})); }
+      state.objects.push(rec); selectObject(id); rebuildList(); setDirty(true); toast('Dupliziert'); }
+    $('#btn-duplicate').addEventListener('click', duplicateSelected);
+
+    function dropToFloorSelected(){ const rec=state.objects.find(o=>o.id===state.selectedId); if(!rec) return; const box=new THREE.Box3().setFromObject(rec.group); const dy=-box.min.y; if(Math.abs(dy)>1e-6){ rec.group.position.y += dy; updateBBox(rec); setDirty(true); } }
+    $('#btn-floor').addEventListener('click', dropToFloorSelected);
+
+    function updateBBox(rec){ if(!rec||!rec.bbox) return; const b=new THREE.Box3().setFromObject(rec.group); rec.bbox.box.copy(b); rec.bbox.updateMatrixWorld(true); }
+
+    // Apply prop edits
+    $('#btn-apply').addEventListener('click', ()=>{
+      const rec = state.objects.find(o=>o.id===state.selectedId); if(!rec) return;
+      rec.name = ($('#prop-name').value||rec.name).trim()||rec.name; rec.group.name = rec.name;
+      const px=+$('#posx').value||0, py=+$('#posy').value||0, pz=+$('#posz').value||0;
+      const rx=THREE.MathUtils.degToRad(+$('#rotx').value)||0, ry=THREE.MathUtils.degToRad(+$('#roty').value)||0, rz=THREE.MathUtils.degToRad(+$('#rotz').value)||0;
+      const s=+$('#scale').value||1; rec.group.position.set(px,py,pz); rec.group.rotation.set(rx,ry,rz); rec.group.scale.setScalar(s);
+      updateBBox(rec); rebuildList(); setDirty(true); toast('Eigenschaften übernommen');
+    });
+
+    // Delete
+    $('#btn-delete').addEventListener('click', ()=>{ if(state.selectedId) deleteObject(state.selectedId); });
+    window.addEventListener('keydown', (e)=>{ if(['INPUT','TEXTAREA'].includes((e.target||{}).tagName)) return; if(e.key==='Delete') { if(state.selectedId) deleteObject(state.selectedId); } });
+
+    // Camera views
+    function goCamera(pos,target,fov=30){ const d=450; const t0=performance.now(); const fromPos=camera.position.clone(), fromTarget=controls.target.clone(), fromFov=camera.fov; const toPos=new THREE.Vector3(...pos), toTarget=new THREE.Vector3(...target), toFov=fov; function ease(x){return x<0.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2} function step(){ const t=Math.min(1,(performance.now()-t0)/d); const s=ease(t); camera.position.copy(fromPos).lerp(toPos,s); const tmp=fromTarget.clone().lerp(toTarget,s); controls.target.copy(tmp); camera.fov=fromFov+(toFov-fromFov)*s; camera.updateProjectionMatrix(); if(t<1) requestAnimationFrame(step);} step(); }
+    $('#view-iso').addEventListener('click', ()=> goCamera([15,6,15],[1,0,0],30));
+    $('#view-front').addEventListener('click', ()=> goCamera([0,1.8,8],[0,1,0],30));
+    $('#view-side').addEventListener('click', ()=> goCamera([8,1.8,0],[0,1,0],30));
+    $('#view-top').addEventListener('click', ()=> goCamera([0,10,0],[0,0,0],30));
+    $('#view-reset').addEventListener('click', ()=>{ camera.position.set(15,6,15); controls.target.set(1,0,0); controls.update(); });
+
+    // Screenshot
+    $('#btn-snap').addEventListener('click', ()=>{ const url=renderer.domElement.toDataURL('image/png'); const a=document.createElement('a'); a.href=url; a.download=(projectName||'projekt')+'-screenshot.png'; a.click(); });
+
+    // Animations UI
+    function populateAnimUI(rec){ const sel=$('#anim-clip'); sel.innerHTML=''; if(!rec||!rec.clips?.length){ const o=document.createElement('option'); o.text='(keine)'; o.value=''; sel.appendChild(o); return; } rec.clips.forEach((c,i)=>{ const o=document.createElement('option'); o.text=c.name||('Clip '+(i+1)); o.value=String(i); sel.appendChild(o); }); }
+    $('#anim-play').addEventListener('click', ()=>{ const rec=state.objects.find(o=>o.id===state.selectedId); if(!rec||!rec.mixer||!rec.clips.length) return; const i=parseInt($('#anim-clip').value||'0',10)||0; const act=rec.mixer.clipAction(rec.clips[i].clip); act.reset().play(); });
+    $('#anim-pause').addEventListener('click', ()=>{ const rec=state.objects.find(o=>o.id===state.selectedId); if(!rec||!rec.mixer) return; rec.mixer.timeScale = (rec.mixer.timeScale===0?1:0); });
+    $('#anim-stop').addEventListener('click', ()=>{ const rec=state.objects.find(o=>o.id===state.selectedId); if(!rec||!rec.mixer) return; rec.mixer.stopAllAction(); });
+
+    // Hint FAB
+    (function(){ const hint=$('.hint'); const fab=$('#hintFab'); let hideTimer=null; function open(){ if(hideTimer){clearTimeout(hideTimer);hideTimer=null;} hint.classList.remove('hidden'); fab.setAttribute('aria-expanded','true'); fab.textContent='×'; } function close(){ if(hideTimer){clearTimeout(hideTimer);hideTimer=null;} hint.classList.add('hidden'); fab.setAttribute('aria-expanded','false'); fab.textContent='i'; } fab.addEventListener('mouseenter', open); fab.addEventListener('mouseleave', ()=>{ hideTimer=setTimeout(()=>{ if(!hint.matches(':hover')&&!fab.matches(':hover')) close(); }, 200); }); hint.addEventListener('mouseleave', ()=>{ hideTimer=setTimeout(()=>{ if(!fab.matches(':hover')) close(); }, 100); }); fab.addEventListener('click', (e)=>{ e.preventDefault(); if(hint.classList.contains('hidden')) open(); else close(); }, {passive:false}); })();
+
+    // Project: new/open/save
+    $('#btn-new').addEventListener('click', async ()=>{
+      if(isDirty && !confirm('Szene leeren? Ungespeicherte Änderungen gehen verloren.')) return;
+      const name = prompt('Projektname:', 'Neues Projekt'); if(name===null) return; doNewProject(name||'Neues Projekt');
+    });
+    $('#file-project').addEventListener('change', (e)=>{ const f=e.target.files?.[0]; if(!f){ e.target.value=''; return; } if(isDirty && !confirm('Ungespeicherte Änderungen verwerfen und Projekt öffnen?')){ e.target.value=''; return; } importProjectFile(f); e.target.value=''; });
+    $('#btn-save').addEventListener('click', ()=> saveProject(false));
+    $('#btn-save-as').addEventListener('click', ()=> saveProject(true));
+
+    async function fileToBase64(file){ return new Promise((resolve,reject)=>{ const fr=new FileReader(); fr.onload=()=>{ const res=(fr.result||'').toString(); const base64=res.split(',')[1]||''; resolve({ base64, mime:(res.split(';')[0]||'').replace('data:','') || file.type || 'application/octet-stream' }); }; fr.onerror=reject; fr.readAsDataURL(file); }); }
+    function base64ToBlobUrl(b64, mime='application/octet-stream'){ const arrbuf=Uint8Array.from(atob(b64), c=>c.charCodeAt(0)).buffer; const blob=new Blob([arrbuf], {type:mime}); return URL.createObjectURL(blob); }
+
+    async function buildProjectBlob(){
+      const objects = [];
+      for(const o of state.objects){
+        let asset=null; if(o.file){ const {base64,mime}=await fileToBase64(o.file); asset={filename:o.file.name, mime, base64}; }
+        const g=o.group; const t=snapshotTransform(g);
+        const animNames = (o.clips||[]).map(c=> c.name);
+        objects.push({ name:o.name, transform:t, asset, animations:animNames });
+      }
+      const data={ version:'2.2.1', meta:{app:'WebAR Editor', projectName}, settings:{ roomSize: parseFloat($('#roomSize').value)||24, fitSize: parseFloat($('#fitSize').value)||1.5 }, objects };
+      return new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+    }
+
+    async function saveProject(saveAs){ const blob=await buildProjectBlob(); if('showSaveFilePicker' in window){ try{ if(saveAs||!fileHandle){ fileHandle=await window.showSaveFilePicker({ suggestedName: (projectName?projectName+'.webar':'projekt.webar'), types:[{description:'WebAR Projekt', accept:{'application/json':['.webar','.json']}}] }); } const writable=await fileHandle.createWritable(); await writable.write(blob); await writable.close(); setDirty(false); toast('Projekt gespeichert'); return; }catch(err){ if(err?.name==='AbortError') return; console.warn(err); }} const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=(projectName?projectName+'.webar':'projekt.webar'); a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); setDirty(false); toast('Download gespeichert'); }
+
+    async function importProjectFile(file){ try{ const text=await file.text(); const data=JSON.parse(text); await importProjectData(data, file.name.replace(/\.(webar|json)$/i,'')); }catch(e){ console.error(e); toast('Konnte Projekt nicht laden'); } }
+    async function importProjectData(data, fallbackName){ // clear
+      [...state.objects].forEach(o=>{ scene.remove(o.group); o.bbox && scene.remove(o.bbox); }); state.objects=[]; state.selectedId=null; tcontrols.detach();
+      if(data.meta?.projectName || fallbackName) setProjectName(data.meta?.projectName || fallbackName);
+      if(data.settings){ if(typeof data.settings.roomSize!=='undefined'){ $('#roomSize').value=data.settings.roomSize; buildRoom(data.settings.roomSize); } if(typeof data.settings.fitSize!=='undefined'){ $('#fitSize').value=data.settings.fitSize; } }
+      for(const obj of (data.objects||[])){
+        if(obj.asset && obj.asset.base64){ const url=base64ToBlobUrl(obj.asset.base64, obj.asset.mime||'application/octet-stream'); const {group, animations}=await createGroupedFromURL(url, obj.name||'Objekt'); applyTransform(group, obj.transform||{position:[0,0,0],rotationDeg:[0,0,0],scale:1}); const bbox=new THREE.Box3().setFromObject(group); const helper=new THREE.Box3Helper(bbox,0x3399ff); helper.visible=false; helper.raycast=()=>{}; scene.add(helper); const rec={ id:uid(), name:group.name, file:null, url, group, bbox:helper, hidden:false, locked:false, animations, mixer:null, clips:[] }; if(animations?.length){ rec.mixer=new THREE.AnimationMixer(group); rec.clips=animations.map((c,i)=>({name:c.name||('Clip '+(i+1)), clip:c})); } state.objects.push(rec); }
+        else{ const group=new THREE.Group(); group.name=obj.name||'Objekt'; scene.add(group); applyTransform(group, obj.transform||{position:[0,0,0],rotationDeg:[0,0,0],scale:1}); const bbox=new THREE.Box3().setFromObject(group); const helper=new THREE.Box3Helper(bbox,0x3399ff); helper.visible=false; helper.raycast=()=>{}; scene.add(helper); state.objects.push({ id:uid(), name:group.name, file:null, url:null, group, bbox:helper, hidden:false, locked:false, animations:[], mixer:null, clips:[] }); }
+      }
+      rebuildList(); setDirty(false); toast('Projekt geladen');
+    }
+
+    function doNewProject(name){ // clear
+      [...state.objects].forEach(o=>{ scene.remove(o.group); o.bbox && scene.remove(o.bbox); }); state.objects=[]; state.selectedId=null; tcontrols.detach(); buildRoom(parseFloat($('#roomSize').value)||24); camera.position.set(15,6,15); controls.target.set(1,0,0); controls.update(); setProjectName(name); fileHandle=null; setDirty(false); rebuildList(); toast('Neues Projekt: '+name); }
+
+    // Helpers
+    function snapshotTransform(g){ return { position:[g.position.x,g.position.y,g.position.z], rotationDeg:[THREE.MathUtils.radToDeg(g.rotation.x),THREE.MathUtils.radToDeg(g.rotation.y),THREE.MathUtils.radToDeg(g.rotation.z)], scale:g.scale.x }; }
+    function applyTransform(g,t){ g.position.set(t.position[0],t.position[1],t.position[2]); g.rotation.set(THREE.MathUtils.degToRad(t.rotationDeg[0]),THREE.MathUtils.degToRad(t.rotationDeg[1]),THREE.MathUtils.degToRad(t.rotationDeg[2])); g.scale.setScalar(t.scale); }
+
+    // Header: inline rename
+    (function enableProjectInlineRename(){ const el=$('#projName'); el.style.cursor='text'; function startEdit(){ const orig=projectName; el.contentEditable='true'; el.textContent=orig; const range=document.createRange(); range.selectNodeContents(el); const sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(range); function endEdit(save){ el.contentEditable='false'; const val=(el.textContent||'').trim(); if(save){ setProjectName(val||orig); setDirty(true); } else { setProjectName(orig); } el.removeEventListener('keydown', onKey); el.removeEventListener('blur', onBlur); } function onKey(e){ if(e.key==='Enter'){ e.preventDefault(); endEdit(true); } else if(e.key==='Escape'){ e.preventDefault(); endEdit(false); } } function onBlur(){ endEdit(true); } el.addEventListener('keydown', onKey); el.addEventListener('blur', onBlur); } el.addEventListener('dblclick', (e)=>{ e.preventDefault(); startEdit(); }); })();
+
+    // Keyboard shortcuts
+    window.addEventListener('keydown', (e)=>{
+      if(['INPUT','TEXTAREA','SELECT'].includes((e.target||{}).tagName)) return;
+      const k=(e.key||'').toLowerCase(); const ctrl=e.ctrlKey||e.metaKey;
+      if(k==='w') { $('#tool-mode').value='translate'; updateTool(); }
+      if(k==='e') { $('#tool-mode').value='rotate';    updateTool(); }
+      if(k==='r') { $('#tool-mode').value='scale';     updateTool(); }
+      if(k==='q') { const cur = tcontrols.space==='world'?'local':'world'; setSpace(cur); }
+      if(k==='d') { duplicateSelected(); }
+      if(k==='f') { dropToFloorSelected(); }
+      if(k==='delete') { if(state.selectedId) deleteObject(state.selectedId); }
+    });
+
+    // Animation loop
+    const clock = new THREE.Clock();
+    function loop(){ requestAnimationFrame(loop); const dt=clock.getDelta(); state.objects.forEach(o=>{ if(o.mixer) o.mixer.update(dt); }); controls.update(); renderer.render(scene,camera); }
+
+    // Init
+    buildRoom(parseFloat($('#roomSize').value)||24); updateGridOnTop(); applySnap(); updateTool(); loop();
+  </script>
 </body>
 </html>
