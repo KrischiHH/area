@@ -93,6 +93,74 @@
       });
     }
 
+    // --- Anchor-UI toggeln ---
+function updateAnchorUI(){
+  const m = document.getElementById('anchorMode').value;
+  document.getElementById('row-image').style.display  = (m === 'image')  ? '' : 'none';
+  document.getElementById('row-native').style.display = (m === 'native') ? '' : 'none';
+}
+
+// --- Editor-Transform in Query umwandeln ---
+function buildTransformQuery(){
+  const q = new URLSearchParams();
+  if (model){
+    // Position
+    q.set('px', model.position.x.toFixed(6));
+    q.set('py', model.position.y.toFixed(6));
+    q.set('pz', model.position.z.toFixed(6));
+    // Rotation (RAD)
+    q.set('rx', model.rotation.x.toFixed(6));
+    q.set('ry', model.rotation.y.toFixed(6));
+    q.set('rz', model.rotation.z.toFixed(6));
+    // Scale (XYZ)
+    q.set('sx', model.scale.x.toFixed(6));
+    q.set('sy', model.scale.y.toFixed(6));
+    q.set('sz', model.scale.z.toFixed(6));
+  }
+  // Animation-Index (falls gesetzt)
+  const idx = document.getElementById('anim').value;
+  if (idx !== "") q.set('anim', idx);
+  return q.toString();
+}
+
+// --- Veröffentlichen: öffnet deine Modul-Seiten über HTTPS (jsDelivr) ---
+function publishFromEditor(){
+  const glbUrl = document.getElementById('url').value.trim();
+  if (!glbUrl){ alert('Bitte zuerst ein GLB laden oder die GLB-URL eintragen.'); return; }
+
+  const mode   = document.getElementById('anchorMode').value;
+  const target = document.getElementById('imageTarget').value.trim();
+  const usdz   = document.getElementById('usdzUrl').value.trim();
+
+  // Deine Modulpfade im Repo (HTTPS, funktioniert überall)
+  const BASE = {
+    'surface-webxr': 'https://cdn.jsdelivr.net/gh/KrischiHH/area@main/surface-ar/webxr.html',
+    'native':        'https://cdn.jsdelivr.net/gh/KrischiHH/area@main/surfaces-ar/surface-viewer.html',
+    'image':         'https://cdn.jsdelivr.net/gh/KrischiHH/area@main/image-ar/viewer.html'
+  };
+
+  // Grund-URL + GLB
+  let url = `${BASE[mode]}?glb=${encodeURIComponent(glbUrl)}`;
+
+  // Transform/Anim aus dem Editor anhängen
+  const tqs = buildTransformQuery();
+  if (tqs) url += `&${tqs}`;
+
+  // Modus-spezifische Parameter
+  if (mode === 'image'){
+    if (!target){ alert('Bitte Target (.mind) angeben.'); return; }
+    url += `&target=${encodeURIComponent(target)}`;
+  }
+  if (mode === 'native'){
+    if (usdz) url += `&usdz=${encodeURIComponent(usdz)}`; // iOS Quick Look
+    // (Android Scene Viewer nutzt das glb= bereits)
+  }
+
+  // Öffnen
+  window.open(url, '_blank');
+}
+
+
     document.addEventListener('DOMContentLoaded', ()=>{
       init();
 
@@ -135,6 +203,11 @@
       document.getElementById('mode-rotate').addEventListener('click', ()=> transform.setMode('rotate'));
       document.getElementById('mode-scale').addEventListener('click', ()=> transform.setMode('scale'));
 
+      updateAnchorUI(); // initiale Sichtbarkeit
+document.getElementById('anchorMode').addEventListener('change', updateAnchorUI);
+document.getElementById('publish').addEventListener('click', publishFromEditor);
+
+
       document.getElementById('export').addEventListener('click', ()=>{
         const data = {
           modelUrl: document.getElementById('url').value.trim(),
@@ -162,6 +235,30 @@
     <button id="mode-rotate">Rotate</button>
     <button id="mode-scale">Scale</button>
     <button id="export">Export scene.json</button>
+    
+    <!-- Anchor-Auswahl + Publish -->
+<label>Modus:&nbsp;
+  <select id="anchorMode">
+    <option value="surface-webxr" selected>Surface (WebXR)</option>
+    <option value="image">Image Trigger</option>
+    <option value="native">Surface (Native)</option>
+  </select>
+</label>
+
+<!-- nur für Image Trigger -->
+<label id="row-image" style="display:none">Target (.mind):&nbsp;
+  <input id="imageTarget" type="text"
+         value="https://cdn.jsdelivr.net/gh/KrischiHH/area@main/assets/targets/target.mind"
+         placeholder="https://…/target.mind">
+</label>
+
+<!-- nur für Native -->
+<label id="row-native" style="display:none">USDZ (iOS):&nbsp;
+  <input id="usdzUrl" type="text" placeholder="https://…/model.usdz">
+</label>
+
+<button id="publish">Veröffentlichen</button>
+
   </header>
   <div id="viewer"></div>
   <div id="overlay">Tipp: Lege eigene Modelle unter <code>/assets/models/</code> ab (GitHub Pages URL verwenden).</div>
