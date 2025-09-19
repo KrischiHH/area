@@ -38,15 +38,11 @@
     *{box-sizing:border-box}
     html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,Segoe UI,Inter,Roboto,Arial,sans-serif}
     .top{height:56px;display:flex;gap:8px;align-items:center;padding:0 12px;background:var(--panel);border-bottom:1px solid var(--border);position:relative;z-index:10}
-    .brand{font-weight:800;letter-spacing:.02em}
-    .ver{opacity:.75;margin-left:6px}
-    .muted{color:var(--muted)}
     .sp{flex:1}
     .btn{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:10px;cursor:pointer;font-weight:700}
     .btn:hover{border-color:var(--accent)}
     .btn:disabled,.toolbtn:disabled{opacity:.5;cursor:not-allowed}
 
-    /* Viewport-Fix */
     .wrap{
       height:calc(100vh - 56px);
       display:grid;
@@ -194,7 +190,7 @@
       <div id="stage"></div>
       <div id="vpStatus" class="status-badge"><span id="vp-pill-space" class="status-pill">Space: Local</span><span id="vp-pill-snap" class="status-pill">Snap: Aus</span></div>
       <button id="hintFab" class="hint-fab" aria-expanded="false" title="Hinweise">i</button>
-      <div class="hint hidden">LMB drehen · Rad zoomen · RMB/Shift+LMB schwenken · Klick = Auswahl (Shift=Mehrfach) · W/E/R Move/Rotate/Scale · D Duplizieren · F Drop-to-Floor · Entf Löschen · 1–5 Bookmarks · Shift+1–5 Speichern · Ctrl+G Gruppieren · Ctrl+Shift+G Aufheben</div>
+      <div class="hint hidden" id="hintBox">LMB drehen · Rad zoomen · RMB/Shift+LMB schwenken · Klick = Auswahl (Shift=Mehrfach) · W/E/R Move/Rotate/Scale · D Duplizieren · F Drop-to-Floor · Entf Löschen · 1–5 Bookmarks · Shift+1–5 Speichern · Ctrl+G Gruppieren · Ctrl+Shift+G Aufheben</div>
     </div>
 
     <!-- RIGHT -->
@@ -400,6 +396,13 @@
     function promptNewName(){ const v = prompt('Projektname:', projectName==='Unbenanntes Projekt'?'Mein AR-Projekt':projectName); if(v!=null) setProjectName(v); }
     $('#projNamePill').addEventListener('dblclick', promptNewName);
 
+    // Hint-Toggle
+    $('#hintFab').addEventListener('click', ()=>{
+      const box = $('#hintBox');
+      const hidden = box.classList.toggle('hidden');
+      $('#hintFab').setAttribute('aria-expanded', hidden?'false':'true');
+    });
+
     const stage = $('#stage');
     const renderer = new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
     renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
@@ -426,7 +429,7 @@
     const pmrem = new THREE.PMREMGenerator(renderer);
     scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
-    // ==== MEDIA: AudioListener (für PositionalAudio)
+    // MEDIA: AudioListener
     const audioListener = new THREE.AudioListener();
     camera.add(audioListener);
 
@@ -604,9 +607,717 @@
       rec.group.traverse(c=>{ if(c.userData?.__pickProxy){ c.parent?.remove(c); c.geometry?.dispose?.(); c.material?.dispose?.(); }});
       rec.group.updateMatrixWorld(true);
       const boxW=new THREE.Box3().setFromObject(rec.group); if(!isFinite(boxW.min.x)) return;
-      const cornersW=[new THREE.Vector3(boxW.min.x,boxW.min.y,boxW.min.z),new THREE.Vector3(boxW.min.x,boxW.min.y,boxW.max.z),new THREE.Vector3(boxW.min.x,boxW.max.y,boxW.min.z),new THREE.Vector3(boxW.min.x,boxW.max.y,boxW.max.z),new THREE.Vector3(boxW.max.x,boxW.min.y,boxW.min.z),new THREE.Vector3(boxW.max.x,boxW.min.y,boxW.max.z),new THREE.Vector3(boxW.max.x,boxW.max.y,boxW.min-z),new THREE.Vector3(boxW.max.x,boxW.max.y,boxW.max.z)];
-      // ^ small typo fixed? (Keep original) -> We'll keep original coordinates:
+      const cornersW=[
+        new THREE.Vector3(boxW.min.x,boxW.min.y,boxW.min.z),
+        new THREE.Vector3(boxW.min.x,boxW.min.y,boxW.max.z),
+        new THREE.Vector3(boxW.min.x,boxW.max.y,boxW.min.z),
+        new THREE.Vector3(boxW.min.x,boxW.max.y,boxW.max.z),
+        new THREE.Vector3(boxW.max.x,boxW.min.y,boxW.min.z),
+        new THREE.Vector3(boxW.max.x,boxW.min.y,boxW.max.z),
+        new THREE.Vector3(boxW.max.x,boxW.max.y,boxW.min.z),
+        new THREE.Vector3(boxW.max.x,boxW.max.y,boxW.max.z)
+      ];
+      const cornersL=cornersW.map(p=>rec.group.worldToLocal(p.clone()));
+      const minL=new THREE.Vector3(+Infinity,+Infinity,+Infinity), maxL=new THREE.Vector3(-Infinity,-Infinity,-Infinity);
+      cornersL.forEach(p=>{minL.min(p); maxL.max(p);});
+      const PAD=0.01; minL.subScalar(PAD); maxL.addScalar(PAD);
+      const sizeL=new THREE.Vector3().subVectors(maxL,minL), centerL=new THREE.Vector3().addVectors(minL,maxL).multiplyScalar(0.5);
+      const geo=new THREE.BoxGeometry(Math.max(sizeL.x,1e-3),Math.max(sizeL.y,1e-3),Math.max(sizeL.z,1e-3));
+      const mat=new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthTest:false,depthWrite:false}); mat.colorWrite=false;
+      const proxy=new THREE.Mesh(geo,mat); proxy.position.copy(centerL); proxy.name='__pickProxy'; proxy.userData.__pickProxy=true;
+      rec.group.add(proxy); rec.__pickProxy=proxy;
     }
+    tcontrols.addEventListener('objectChange', ()=>{ if(state.selection.size!==1) return; const rec=findRec(state.selectedId); if(!rec) return; addPickProxy(rec); updateOutlineSelection(); });
+
+    async function addFromFile(file){
+      const id=uid(); const url=URL.createObjectURL(file);
+      try{
+        const name=(file.name||'Objekt').replace(/\.(glb|gltf)$/i,'');
+        const {group,root,clips}=await createGroupedFromURL(url,name); URL.revokeObjectURL(url);
+        fitUniformScale(group,1.5);
+        prepareMaterialBases(group); scene.add(group);
+        const rec={id,type:'object',name:group.name,file, url:null, group, root, clips, mixer:null, actions:{}, hidden:false, locked:false, media:null};
+        state.objects.push(rec); addPickProxy(rec); selectOnly(id); populateAnimUI(rec); updateMaterialLook(); toast('Importiert: '+group.name);
+      }catch(e){console.error(e); toast('Import fehlgeschlagen'); URL.revokeObjectURL(url);}
+    }
+    $('#file-glb').addEventListener('change', e=>{ const f=e.target.files?.[0]; if(!f){ e.target.value=''; return;} addFromFile(f); e.target.value=''; });
+    stage.addEventListener('dragover', e=>e.preventDefault());
+    stage.addEventListener('drop', e=>{ e.preventDefault(); const f=e.dataTransfer?.files?.[0]; if(f && /(\.glb|\.gltf)$/i.test(f.name)) addFromFile(f); });
+
+    // Material helpers
+    function iterateMaterials(root, cb){
+      root.traverse(ch=>{ if(ch?.isMesh && ch.material){ const mats=Array.isArray(ch.material)?ch.material:[ch.material]; mats.forEach(m=>m && cb(m)); }});
+    }
+    function prepareMaterialBases(root){
+      iterateMaterials(root, m=>{
+        const ud=m.userData||(m.userData={}); const base=ud.__base||(ud.__base={});
+        if(base.roughness===undefined && 'roughness' in m) base.roughness=(typeof m.roughness==='number')?m.roughness:0.5;
+        if(base.envMapIntensity===undefined && 'envMapIntensity' in m) base.envMapIntensity=(typeof m.envMapIntensity==='number')?m.envMapIntensity:1;
+      });
+    }
+    function updateMaterialLook(){
+      const add=parseFloat($('#matRoughAdd')?.value)||0, mul=parseFloat($('#matEnvMul')?.value)||1;
+      state.objects.forEach(rec=>{
+        if(!rec?.group) return;
+        iterateMaterials(rec.group, m=>{
+          const base=m.userData?.__base||{};
+          if('roughness' in m && base.roughness!==undefined) m.roughness=Math.min(1,Math.max(0, base.roughness+add));
+          if('envMapIntensity' in m && base.envMapIntensity!==undefined) m.envMapIntensity=base.envMapIntensity*mul;
+          m.needsUpdate=true;
+        });
+      });
+    }
+    $('#matRoughAdd')?.addEventListener('input', updateMaterialLook);
+    $('#matEnvMul')?.addEventListener('input', updateMaterialLook);
+
+    function syncPropFromSel(){
+      if(state.selection.size!==1){ $('#prop-name').value=''; ['posx','posy','posz','rotx','roty','rotz','scale'].forEach(id=>$('#'+id).value=''); populateAnimUI(null); return; }
+      const rec=findRec(state.selectedId); if(!rec) return;
+      $('#prop-name').value=rec.name;
+      const g=rec.group; const p=g.position,r=g.rotation;
+      $('#posx').value=p.x.toFixed(3); $('#posy').value=p.y.toFixed(3); $('#posz').value=p.z.toFixed(3);
+      $('#rotx').value=THREE.MathUtils.radToDeg(r.x).toFixed(1); $('#roty').value=THREE.MathUtils.radToDeg(r.y).toFixed(1); $('#rotz').value=THREE.MathUtils.radToDeg(r.z).toFixed(1);
+      $('#scale').value=g.scale.x.toFixed(3);
+      populateAnimUI(rec.type==='object'?rec:null);
+    }
+    $('#btn-apply').addEventListener('click', ()=>{
+      if(state.selection.size!==1) return;
+      const rec=findRec(state.selectedId); if(!rec) return;
+      const g=rec.group;
+      rec.name = ($('#prop-name').value||rec.name).trim()||rec.name; g.name=rec.name;
+      const px=+$('#posx').value||0, py=+$('#posy').value||0, pz=+$('#posz').value||0;
+      const rx=THREE.MathUtils.degToRad(+$('#rotx').value||0), ry=THREE.MathUtils.degToRad(+$('#roty').value||0), rz=THREE.MathUtils.degToRad(+$('#rotz').value||0);
+      const s=+$('#scale').value||1;
+      g.position.set(px,py,pz); g.rotation.set(rx,ry,rz); g.scale.setScalar(s);
+      addPickProxy(rec); updateOutlineSelection(); rebuildList();
+    });
+    function submitOnEnter(el,fn){ el.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); fn(); }}); }
+    ['prop-name','posx','posy','posz','rotx','roty','rotz','scale'].forEach(id=> submitOnEnter($('#'+id), ()=>$('#btn-apply').click()));
+
+    function updateToolButtons(){ ['tool-move','tool-rotate','tool-scale'].forEach(id=>$('#'+id)?.classList.remove('active')); const m=tcontrols.getMode(); const map={translate:'tool-move',rotate:'tool-rotate',scale:'tool-scale'}; $('#'+map[m])?.classList.add('active'); }
+    $('#tool-move').addEventListener('click', ()=>{ tcontrols.setMode('translate'); updateToolButtons(); });
+    $('#tool-rotate').addEventListener('click', ()=>{ tcontrols.setMode('rotate'); updateToolButtons(); });
+    $('#tool-scale').addEventListener('click', ()=>{ tcontrols.setMode('scale'); updateToolButtons(); });
+
+    let currentSpace='local';
+    function updateSpaceButtons(){ $('#space-local').classList.toggle('active',currentSpace==='local'); $('#space-world').classList.toggle('active',currentSpace==='world'); }
+    function setSpace(space){ currentSpace=(space==='world')?'world':'local'; tcontrols.setSpace(currentSpace); $('#vp-pill-space').textContent='Space: '+(currentSpace==='world'?'World':'Local'); updateSpaceButtons(); }
+    $('#space-local').addEventListener('click', ()=>setSpace('local'));
+    $('#space-world').addEventListener('click', ()=>setSpace('world'));
+
+    function duplicateSelected(){
+      const ids=[...state.selection]; if(!ids.length) return; const newIds=[];
+      ids.forEach(id=>{
+        const src=findRec(id); if(!src || src.type!=='object') return;
+        const g=new THREE.Group(); g.name=src.name+' (Kopie)';
+        if(src.media?.kind==='video'){
+          const vid = document.createElement('video'); vid.src = src.media.src; vid.loop=src.media.loop; vid.crossOrigin='anonymous'; vid.playsInline=true; vid.preload='auto';
+          const tex = new THREE.VideoTexture(vid); tex.colorSpace=THREE.SRGBColorSpace; tex.flipY=false;
+          const w=src.media.w||1.6, h=src.media.h||0.9;
+          const plane=new THREE.Mesh(new THREE.PlaneGeometry(w,h), new THREE.MeshBasicMaterial({map:tex, toneMapped:false}));
+          g.add(plane);
+          g.userData.__media={kind:'video', el:vid, tex, loop:!!src.media.loop, repeats:src.media.repeats||1, count:0, w, h, src:src.media.src};
+        } else if(src.media?.kind==='audio'){
+          const mesh=new THREE.Mesh(new THREE.SphereGeometry(0.08,16,16), new THREE.MeshStandardMaterial({color:0x66aaff, emissive:0x0a1e3a, roughness:0.3, metalness:0.1}));
+          const sound=new THREE.PositionalAudio(audioListener);
+          g.add(mesh); mesh.add(sound);
+          const loader=new THREE.AudioLoader(); loader.load(src.media.src, buffer=>{ sound.setBuffer(buffer); sound.setRefDistance(1.5); sound.setDistanceModel('inverse'); sound.setLoop(!!src.media.loop); });
+          g.userData.__media={kind:'audio', sound, loop:!!src.media.loop, repeats:src.media.repeats||1, count:0, src:src.media.src};
+        } else {
+          const clonedRoot = SkeletonUtils.clone(src.root);
+          g.add(clonedRoot);
+          prepareMaterialBases(g); updateMaterialLook();
+        }
+
+        scene.add(g);
+        const t=src.group;
+        g.position.copy(t.position); g.quaternion.copy(t.quaternion); g.scale.copy(t.scale);
+        g.position.add(new THREE.Vector3(0.25,0,0.25));
+        const rec={ id:uid(), type:'object', name:g.name, file:src.file||null, url:null, group:g, root:(src.root? g.children.find(c=>c!==undefined):null), clips:(src.clips||[]).slice(), mixer:null, actions:{}, hidden:false, locked:false, media:g.userData.__media||null };
+        state.objects.push(rec); addPickProxy(rec); newIds.push(rec.id);
+      });
+      if(newIds.length){ state.selection=new Set(newIds); state.selectedId=newIds[newIds.length-1]; tcontrols.attach(findRec(state.selectedId)?.group||null); rebuildList(); updateOutlineSelection(); toast('Dupliziert'); syncMediaUI(); }
+    }
+    $('#btn-duplicate').addEventListener('click', duplicateSelected);
+
+    function dropToFloor(){
+      const ids=[...state.selection]; if(!ids.length) return;
+      ids.forEach(id=>{
+        const rec=findRec(id); if(!rec) return;
+        const box=new THREE.Box3().setFromObject(rec.group); const dy=-box.min.y;
+        if(Number.isFinite(dy) && Math.abs(dy)>1e-6){ rec.group.position.y += dy; addPickProxy(rec); }
+      });
+      updateOutlineSelection();
+    }
+    $('#btn-floor').addEventListener('click', dropToFloor);
+
+    function disposeObject3DTree(root){
+      root.traverse(n=>{
+        if(n.isMesh){
+          n.geometry?.dispose?.();
+          const mats=Array.isArray(n.material)?n.material:[n.material];
+          mats.forEach(m=>{ if(!m) return; ['map','normalMap','metalnessMap','roughnessMap','emissiveMap','aoMap','alphaMap','envMap','specularMap','bumpMap','displacementMap'].forEach(k=> m[k]?.dispose?.()); m.dispose?.(); });
+        }
+      });
+    }
+
+    function deleteIds(ids){
+      ids.forEach(id=>{
+        const rec=findRec(id); if(!rec) return;
+        if(rec.media?.kind==='video'){
+          try{ rec.media.el.pause(); rec.media.el.src=''; rec.media.tex?.dispose?.(); }catch{}
+        }
+        if(rec.media?.kind==='audio'){
+          try{ rec.media.sound?.stop?.(); rec.media.sound?.disconnect?.(); }catch{}
+        }
+        if(rec.group){ disposeObject3DTree(rec.group); scene.remove(rec.group); }
+        const i=state.objects.indexOf(rec); if(i>=0) state.objects.splice(i,1);
+      });
+      clearSelection(); rebuildList(); updateOutlineSelection();
+    }
+    $('#btn-del').addEventListener('click', ()=> deleteIds([...state.selection]));
+
+    function updateGroupButtons(){
+      const canGroup = state.selection.size>=2 && [...state.selection].every(id=>{ const r=findRec(id); return r && r.type!=='group'; });
+      const canUngroup = state.selection.size===1 && findRec(state.selectedId)?.type==='group';
+      $('#btn-group').disabled=!canGroup; $('#btn-ungroup').disabled=!canUngroup;
+    }
+    function groupSelected(){
+      if(state.selection.size<2) return;
+      const ids=[...state.selection]; const recs=ids.map(findRec).filter(Boolean).filter(r=>r.type==='object');
+      if(recs.length<2) return;
+      const box=new THREE.Box3(); let ok=false;
+      recs.forEach(r=>{ const b=new THREE.Box3().setFromObject(r.group); if(isFinite(b.min.x)){ if(!ok){box.copy(b); ok=true;} else box.union(b);} });
+      const center=new THREE.Vector3(); box.getCenter(center);
+      const parent=new THREE.Group(); parent.name='Gruppe'; parent.position.copy(center); scene.add(parent); parent.updateMatrixWorld(true);
+      const inv=new THREE.Matrix4().copy(parent.matrixWorld).invert();
+      recs.forEach(r=>{ r.group.updateMatrixWorld(true); r.group.applyMatrix4(inv); parent.add(r.group); });
+      const gid=uid(); const grec={id:gid,type:'group',name:'Gruppe',group:parent,children:recs,hidden:false,locked:false};
+      state.objects = state.objects.filter(o=>!ids.includes(o.id)); state.objects.push(grec);
+      state.selection=new Set([gid]); state.selectedId=gid; tcontrols.attach(parent); rebuildList(); updateGroupButtons(); updateOutlineSelection(); toast('Gruppiert');
+    }
+    function ungroupSelected(){
+      if(state.selection.size!==1) return; const rec=findRec(state.selectedId); if(!rec||rec.type!=='group') return;
+      const parent=rec.group; parent.updateMatrixWorld(true); const newIds=[];
+      (rec.children||[]).forEach(child=>{ child.group.updateMatrixWorld(true); child.group.applyMatrix4(parent.matrixWorld); scene.add(child.group); state.objects.push(child); newIds.push(child.id); });
+      scene.remove(parent); const i=state.objects.indexOf(rec); if(i>=0) state.objects.splice(i,1);
+      state.selection=new Set(newIds); state.selectedId=newIds[newIds.length-1]||null; tcontrols.attach(findRec(state.selectedId)?.group||null); rebuildList(); updateGroupButtons(); updateOutlineSelection(); toast('Gruppierung aufgehoben');
+    }
+    $('#btn-group').addEventListener('click', groupSelected);
+    $('#btn-ungroup').addEventListener('click', ungroupSelected);
+
+    function getSnapValues(){ const on=$('#snapChk').checked; const ts=$('#transSnapSel').value; const rs=$('#rotSnapSel').value; const ss=$('#scaleSnapSel').value; return { t:on&&ts?parseFloat(ts):null, r:on&&rs?THREE.MathUtils.degToRad(parseFloat(rs)):null, s:on&&ss?parseFloat(ss):null } }
+    function applySnap(){ const v=getSnapValues(); tcontrols.setTranslationSnap(v.t); tcontrols.setRotationSnap(v.r); tcontrols.setScaleSnap(v.s); $('#vp-pill-snap').textContent='Snap: '+($('#snapChk').checked?'An':'Aus'); }
+    $('#snapChk').addEventListener('change', ()=>{ $('#snapPanel').style.display=$('#snapChk').checked?'block':'none'; applySnap(); });
+    $('#transSnapSel').addEventListener('change', applySnap); $('#rotSnapSel').addEventListener('change', applySnap); $('#scaleSnapSel').addEventListener('change', applySnap);
+
+    function goCamera(pos,target,fov=30,dur=450){
+      const fromPos=camera.position.clone(), toPos=new THREE.Vector3(...pos);
+      const fromTarget=controls.target.clone(), toTarget=new THREE.Vector3(...target);
+      const t0=performance.now();
+      function step(){ const t=Math.min(1,(performance.now()-t0)/dur); const s=t<0.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2; camera.position.copy(fromPos).lerp(toPos,s); const tmp=fromTarget.clone().lerp(toTarget,s); controls.target.copy(tmp); camera.fov=fov; camera.updateProjectionMatrix(); if(t<1) requestAnimationFrame(step); } step();
+    }
+    $('#btn-view-iso').addEventListener('click', ()=> goCamera([15,6,15],[0,0,0]));
+    $('#btn-view-front').addEventListener('click', ()=> goCamera([0,1.8,8],[0,1,0]));
+    $('#btn-view-side').addEventListener('click', ()=> goCamera([8,1.8,0],[0,1,0]));
+    $('#btn-view-top').addEventListener('click', ()=> goCamera([0,10,0],[0,0,0]));
+    $('#btn-frame-all').addEventListener('click', ()=>{
+      const box=new THREE.Box3(); let ok=false;
+      state.objects.forEach(o=>{ const b=new THREE.Box3().setFromObject(o.group); if(isFinite(b.min.x)&&isFinite(b.max.x)){ if(!ok){box.copy(b); ok=true;} else box.union(b);} });
+      if(!ok) return; const s=new THREE.Vector3(); box.getSize(s); const c=new THREE.Vector3(); box.getCenter(c);
+      const radius=Math.max(s.x,s.y,s.z)*0.5; const dist=radius/Math.tan(THREE.MathUtils.degToRad(camera.fov)/2)+radius*0.6;
+      const dir=camera.position.clone().sub(controls.target).normalize(); const pos=c.clone().add(dir.multiplyScalar(dist));
+      goCamera([pos.x,pos.y,pos.z],[c.x,c.y,c.z]);
+    });
+    $('#btn-clear').addEventListener('click', ()=>{ if(!confirm('Szene leeren?')) return; state.objects.forEach(o=>{ if(o.group){ disposeObject3DTree(o.group); scene.remove(o.group); }}); state.objects=[]; clearSelection(); rebuildList(); updateGroupButtons(); updateOutlineSelection(); });
+
+    // Animation UI
+    function populateAnimUI(rec){
+      const sel=$('#animClip'); sel.innerHTML='';
+      if(!rec||!rec.clips||rec.clips.length===0){ const opt=document.createElement('option'); opt.value=''; opt.textContent='— (keine)'; sel.appendChild(opt); sel.disabled=true; return; }
+      sel.disabled=false; rec.clips.forEach((clip,i)=>{ const opt=document.createElement('option'); opt.value=String(i); opt.textContent=clip.name||('Clip '+(i+1)); sel.appendChild(opt); });
+    }
+    function ensureMixer(rec){ if(!rec) return null; if(!rec.mixer){ rec.mixer=new THREE.AnimationMixer(rec.root); } return rec.mixer; }
+    function stopAnim(rec){ if(!rec || !rec.mixer) return; rec.mixer.stopAllAction(); rec.actions={}; }
+    $('#animPlay').addEventListener('click', ()=>{
+      if(state.selection.size!==1) return; const rec=findRec(state.selectedId);
+      if(!rec || rec.type!=='object' || !rec.clips?.length) return;
+      const idx=parseInt($('#animClip').value||'0',10)||0; const clip=rec.clips[idx]; const mixer=ensureMixer(rec);
+      mixer.stopAllAction(); const act=mixer.clipAction(clip); rec.actions[idx]=act;
+      const loop=$('#animLoop').value; const reps=parseInt($('#animRepeats').value||'9999',10)||9999;
+      if(loop==='off'||loop==='once'){ act.setLoop(THREE.LoopOnce,0); act.clampWhenFinished=true; } else { act.setLoop(THREE.LoopRepeat,reps); }
+      act.reset().play();
+    });
+    $('#animStop').addEventListener('click', ()=>{ if(state.selection.size!==1) return; const rec=findRec(state.selectedId); if(rec && rec.type==='object') stopAnim(rec); $('#animPause').textContent='Pause'; });
+    $('#animPause').addEventListener('click', ()=>{
+      if(state.selection.size!==1) return; const rec=findRec(state.selectedId); if(!rec || rec.type!=='object' || !rec.mixer) return;
+      if(rec.mixer.timeScale===0){ rec.mixer.timeScale=1; $('#animPause').textContent='Pause'; } else { rec.mixer.timeScale=0; $('#animPause').textContent='Weiter'; }
+    });
+
+    // MEDIA: Import, UI, Playback
+    const audioLoader = new THREE.AudioLoader();
+
+    function isVideoFile(f){ return /^video\//.test(f.type) || /\.(mp4|webm|ogg)$/i.test(f.name); }
+    function isAudioFile(f){ return /^audio\//.test(f.type) || /\.(mp3|wav|ogg|m4a)$/i.test(f.name); }
+
+    $('#file-media').addEventListener('change', async (e)=>{
+      const file=e.target.files?.[0]; e.target.value=''; if(!file) return;
+      if(isVideoFile(file)) await addVideoFromFile(file);
+      else if(isAudioFile(file)) await addAudioFromFile(file);
+      else toast('Unbekanntes Medienformat');
+    });
+
+    async function addVideoFromFile(file){
+      const id=uid(); const url=URL.createObjectURL(file);
+      const name=(file.name||'Video').replace(/\.[^/.]+$/,'');
+      const vid=document.createElement('video');
+      vid.src=url; vid.crossOrigin='anonymous'; vid.playsInline=true; vid.preload='auto'; vid.loop=false; vid.muted=false; vid.controls=false;
+      let w=1.6, h=0.9;
+      const tex=new THREE.VideoTexture(vid); tex.colorSpace=THREE.SRGBColorSpace; tex.flipY=false;
+      const plane=new THREE.Mesh(new THREE.PlaneGeometry(w,h), new THREE.MeshBasicMaterial({map:tex, toneMapped:false}));
+      const group=new THREE.Group(); group.name=name; group.add(plane);
+      vid.addEventListener('loadedmetadata', ()=>{ if(vid.videoWidth && vid.videoHeight){ const ar=vid.videoWidth/vid.videoHeight; w=1.6; h=w/ar; plane.geometry.dispose(); plane.geometry=new THREE.PlaneGeometry(w,h); const rec=findRec(id); if(rec && rec.media){ rec.media.w=w; rec.media.h=h; } }}, {once:true});
+
+      scene.add(group);
+      const rec={id,type:'object',name, file, url:null, group, root:null, clips:[], mixer:null, actions:{}, hidden:false, locked:false,
+        media:{kind:'video', el:vid, tex, loop:false, repeats:1, count:0, w, h, src:url}
+      };
+      state.objects.push(rec); addPickProxy(rec); selectOnly(id); rebuildList(); syncMediaUI(); toast('Video importiert');
+    }
+
+    async function addAudioFromFile(file){
+      const id=uid(); const url=URL.createObjectURL(file);
+      const name=(file.name||'Audio').replace(/\.[^/.]+$/,'');
+      const group=new THREE.Group(); group.name=name;
+      const gizmo=new THREE.Mesh(new THREE.SphereGeometry(0.08,16,16), new THREE.MeshStandardMaterial({color:0x66aaff, emissive:0x0a1e3a, roughness:0.3, metalness:0.1}));
+      const sound=new THREE.PositionalAudio(audioListener);
+      group.add(gizmo); gizmo.add(sound);
+      scene.add(group);
+
+      audioLoader.load(url, buffer=>{
+        sound.setBuffer(buffer);
+        sound.setRefDistance(1.5);
+        sound.setDistanceModel('inverse');
+        sound.setLoop(false);
+      });
+
+      const rec={id,type:'object',name, file, url:null, group, root:null, clips:[], mixer:null, actions:{}, hidden:false, locked:false,
+        media:{kind:'audio', sound, loop:false, repeats:1, count:0, src:url}
+      };
+      state.objects.push(rec); addPickProxy(rec); selectOnly(id); rebuildList(); syncMediaUI(); toast('Audio importiert');
+    }
+
+    function syncMediaUI(){
+      const box=$('#sec-media'); const t=$('#mediaType'); const loop=$('#mediaLoop'); const reps=$('#mediaRepeats');
+      if(state.selection.size!==1){ box.style.display='none'; return; }
+      const rec=findRec(state.selectedId); if(!rec?.media){ box.style.display='none'; return; }
+      box.style.display='block';
+      t.value = rec.media.kind==='video' ? 'Video' : 'Audio (3D)';
+      loop.checked = !!rec.media.loop;
+      reps.value = rec.media.repeats ?? 1;
+    }
+    $('#mediaLoop').addEventListener('change', ()=>{
+      if(state.selection.size!==1) return; const rec=findRec(state.selectedId); if(!rec?.media) return;
+      rec.media.loop = $('#mediaLoop').checked;
+      if(rec.media.kind==='video'){ rec.media.el.loop = rec.media.loop; }
+      if(rec.media.kind==='audio'){ rec.media.sound?.setLoop?.(rec.media.loop); }
+    });
+    $('#mediaRepeats').addEventListener('change', ()=>{
+      if(state.selection.size!==1) return; const rec=findRec(state.selectedId); if(!rec?.media) return;
+      const v=Math.max(1, parseInt($('#mediaRepeats').value||'1',10)||1);
+      rec.media.repeats = v;
+    });
+
+    function mediaPlay(rec){
+      if(!rec?.media) return;
+      rec.media.count = 0;
+      if(rec.media.kind==='video'){
+        const v=rec.media.el; v.currentTime = v.currentTime||0; v.play().catch(()=>{ toast('Autoplay blockiert? Tipp: einmal manuell Play drücken.'); });
+        v.onended = null;
+        if(!rec.media.loop){
+          v.onended = ()=>{
+            rec.media.count++;
+            if(rec.media.count < (rec.media.repeats||1)) v.play();
+          };
+        }
+      } else {
+        const s=rec.media.sound; if(!s?.buffer){ toast('Audio lädt noch…'); return; }
+        s.setLoop(!!rec.media.loop);
+        s.stop();
+        if(!rec.media.loop){
+          let played=0;
+          const playOnce=()=>{ s.play(); s.source.onended = ()=>{ played++; if(played < (rec.media.repeats||1)) playOnce(); }; };
+          playOnce();
+        } else {
+          s.play();
+        }
+      }
+    }
+    function mediaPause(rec){
+      if(!rec?.media) return;
+      if(rec.media.kind==='video'){ rec.media.el.pause(); }
+      else { if(rec.media.sound?.isPlaying){ rec.media.sound.source.stop(); } }
+    }
+    function mediaStop(rec){
+      if(!rec?.media) return;
+      if(rec.media.kind==='video'){ const v=rec.media.el; v.pause(); try{ v.currentTime=0; }catch{} rec.media.count=0; }
+      else { try{ rec.media.sound?.stop?.(); }catch{} rec.media.count=0; }
+    }
+
+    $('#mediaPlay').addEventListener('click', ()=>{ if(state.selection.size!==1) return; const rec=findRec(state.selectedId); mediaPlay(rec); });
+    $('#mediaPause').addEventListener('click', ()=>{ if(state.selection.size!==1) return; const rec=findRec(state.selectedId); mediaPause(rec); });
+    $('#mediaStop').addEventListener('click', ()=>{ if(state.selection.size!==1) return; const rec=findRec(state.selectedId); mediaStop(rec); });
+
+    // Save / Load
+    async function fileToBase64(file){ return new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(r.result); r.onerror=reject; r.readAsDataURL(file); }); }
+    function blobUrlToBase64(url){ return fetch(url).then(r=>r.blob()).then(b=> new Promise(res=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.readAsDataURL(b); })); }
+
+    async function buildProjectData(){
+      const out=[];
+      async function pushRec(rec){
+        if(rec.type==='group' && rec.children){ for(const c of rec.children) await pushRec(c); return; }
+        const g=rec.group; g.updateMatrixWorld(true);
+        const pos=new THREE.Vector3(), quat=new THREE.Qua
+        ternion(), scl=new THREE.Vector3();
+        g.matrixWorld.decompose(pos,quat,scl);
+        const eul=new THREE.Euler().setFromQuaternion(quat,'XYZ');
+
+        let asset=null;
+        if(rec.file){ asset=await fileToBase64(rec.file); }
+        else if(rec.url){ asset=await blobUrlToBase64(rec.url); }
+
+        // Medien separat serialisieren
+        let media=null;
+        if(rec.media){
+          if(rec.media.kind==='video'){
+            const srcData = rec.file ? await fileToBase64(rec.file) : (rec.media.src ? await blobUrlToBase64(rec.media.src) : null);
+            media = { kind:'video', loop:!!rec.media.loop, repeats:rec.media.repeats||1, w:rec.media.w||1.6, h:rec.media.h||0.9, asset:srcData };
+          } else if(rec.media.kind==='audio'){
+            const srcData = rec.file ? await fileToBase64(rec.file) : (rec.media.src ? await blobUrlToBase64(rec.media.src) : null);
+            media = { kind:'audio', loop:!!rec.media.loop, repeats:rec.media.repeats||1, asset:srcData };
+          }
+        }
+
+        out.push({
+          name:rec.name,
+          transform:{
+            position:[pos.x,pos.y,pos.z],
+            rotationDeg:[THREE.MathUtils.radToDeg(eul.x),THREE.MathUtils.radToDeg(eul.y),THREE.MathUtils.radToDeg(eul.z)],
+            scale:scl.x
+          },
+          asset,
+          media
+        });
+      }
+      for(const rec of state.objects) await pushRec(rec);
+      return {
+        version:'2.2.4',
+        meta:{ app:'WebAR Editor', projectName, savedAt:new Date().toISOString() },
+        settings:{ roomSize: parseFloat($('#roomSize').value)||24, gridVisible: $('#gridVisible').checked },
+        objects: out
+      };
+    }
+
+    function stripExt(n){ return (n||'').replace(/\.(webar|json)$/i,''); }
+
+    async function saveProject({saveAs=false}={}) {
+      try {
+        if('showSaveFilePicker' in window){
+          if(saveAs || !window.__fh){
+            const suggested=((projectName && projectName!=='Unbenanntes Projekt')?projectName:'projekt')+'.webar';
+            window.__fh = await window.showSaveFilePicker({ suggestedName:suggested, types:[{description:'WebAR Projekt', accept:{'application/json':['.webar','.json']}}] });
+          }
+          const baseName=stripExt(window.__fh.name||''); if(baseName) setProjectName(baseName);
+          const data=await buildProjectData(); const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+          const w=await window.__fh.createWritable(); await w.write(blob); await w.close(); toast('Projekt gespeichert'); return true;
+        }
+        const downloadName=((projectName && projectName!=='Unbenanntes Projekt')?projectName:'projekt')+'.webar';
+        const data=await buildProjectData(); const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+        const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=downloadName; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000); toast('Download gestartet'); return true;
+      } catch { toast('Speichern abgebrochen'); return false; }
+    }
+
+    async function importProjectFile(file){
+      try{
+        const text=await file.text(); const data=JSON.parse(text);
+        if(!data.meta) data.meta={}; if(!data.meta.projectName && file?.name) data.meta.projectName=stripExt(file.name);
+        await importProjectData(data);
+      }catch(e){ console.error(e); toast('Konnte Projekt nicht laden'); }
+    }
+
+    async function importProjectData(data){
+      state.objects.forEach(o=>{ if(o.group){ disposeObject3DTree(o.group); scene.remove(o.group);} });
+      state.objects=[]; clearSelection();
+
+      if (data.meta?.projectName) setProjectName(data.meta.projectName);
+      if (data.settings){
+        $('#roomSize').value = data.settings.roomSize || 24;
+        buildRoom(parseFloat($('#roomSize').value) || 24);
+        $('#gridVisible').checked = !!data.settings.gridVisible;
+        [gridNear,gridFar,axisX,axisZ].forEach(o=>o && (o.visible = $('#gridVisible').checked));
+      }
+
+      for (const obj of (data.objects || [])){
+        const name = obj.name || 'Objekt';
+        let group=null, root=null, clips=[];
+        let media=null;
+
+        if(obj.media && obj.media.kind==='video'){
+          const vid=document.createElement('video');
+          vid.src = obj.media.asset || ''; vid.crossOrigin='anonymous'; vid.playsInline=true; vid.preload='auto'; vid.loop=!!obj.media.loop; vid.controls=false;
+          const tex=new THREE.VideoTexture(vid); tex.colorSpace=THREE.SRGBColorSpace; tex.flipY=false;
+          const w=obj.media.w||1.6, h=obj.media.h||0.9;
+          const plane=new THREE.Mesh(new THREE.PlaneGeometry(w,h), new THREE.MeshBasicMaterial({map:tex, toneMapped:false}));
+          group=new THREE.Group(); group.name=name; group.add(plane);
+          media={kind:'video', el:vid, tex, loop:!!obj.media.loop, repeats:obj.media.repeats||1, count:0, w, h, src:vid.src};
+        } else if(obj.media && obj.media.kind==='audio'){
+          group=new THREE.Group(); group.name=name;
+          const gizmo=new THREE.Mesh(new THREE.SphereGeometry(0.08,16,16), new THREE.MeshStandardMaterial({color:0x66aaff, emissive:0x0a1e3a, roughness:0.3, metalness:0.1}));
+          const sound=new THREE.PositionalAudio(audioListener); group.add(gizmo); gizmo.add(sound);
+          const src=obj.media.asset||'';
+          if(src){ audioLoader.load(src, buffer=>{ sound.setBuffer(buffer); sound.setRefDistance(1.5); sound.setDistanceModel('inverse'); sound.setLoop(!!obj.media.loop); }); }
+          media={kind:'audio', sound, loop:!!obj.media.loop, repeats:obj.media.repeats||1, count:0, src};
+        } else {
+          const url = obj.asset || null;
+          if(url){
+            const r = await createGroupedFromURL(url, name);
+            group=r.group; root=r.root; clips=r.clips;
+          } else {
+            group=new THREE.Group(); group.name=name;
+          }
+        }
+
+        const t = obj.transform || { position:[0,0,0], rotationDeg:[0,0,0], scale:1 };
+        group.position.set(t.position[0], t.position[1], t.position[2]);
+        group.rotation.set(THREE.MathUtils.degToRad(t.rotationDeg[0]), THREE.MathUtils.degToRad(t.rotationDeg[1]), THREE.MathUtils.degToRad(t.rotationDeg[2]));
+        group.scale.setScalar(t.scale);
+
+        if(!media){ prepareMaterialBases(group); }
+        scene.add(group);
+
+        const rec = { id: uid(), type:'object', name, file:null, url:obj.asset||null, group, root, clips, mixer:null, actions:{}, hidden:false, locked:false, media };
+        state.objects.push(rec); addPickProxy(rec);
+      }
+
+      rebuildList(); updateGroupButtons(); updateOutlineSelection(); updateMaterialLook(); toast('Projekt geladen');
+    }
+
+    // Bookmarks & Exposure
+    const bookmarks=Array(5).fill(null);
+    function saveBookmark(i){ bookmarks[i]={pos:camera.position.clone(),target:controls.target.clone(),fov:camera.fov}; toast(`Bookmark ${i+1} gespeichert`); }
+    function recallBookmark(i){ const bm=bookmarks[i]; if(!bm){ toast(`Kein Bookmark auf ${i+1}`); return; } goCamera([bm.pos.x,bm.pos.y,bm.pos.z],[bm.target.x,bm.target.y,bm.target.z],bm.fov,350); toast(`Bookmark ${i+1} geladen`); }
+    const LIGHT_BASE = { hemi: 0.6, dir: 1.0, amb: 0.05 };
+    function applyExposure(){ const e=parseFloat($('#exposure').value)||1; renderer.toneMappingExposure=e; hemi.intensity=LIGHT_BASE.hemi*e; dir.intensity=LIGHT_BASE.dir*e; amb.intensity=LIGHT_BASE.amb*e; }
+    $('#exposure').addEventListener('input', applyExposure); applyExposure();
+
+    // Anchor-UI toggeln
+    function updateAnchorUI(){
+      const m = $('#anchorMode')?.value || 'surface-webxr';
+      $('#imageTargetRow').style.display = (m==='image')  ? 'grid' : 'none';
+      $('#nativeRow').style.display      = (m==='native') ? 'grid' : 'none';
+    }
+    requestAnimationFrame(updateAnchorUI);
+    $('#anchorMode').addEventListener('change', updateAnchorUI);
+
+    // Export/Share JSON (einmalig definiert)
+    async function exportSceneJSONForShare({ mode, target, rec, HOST }){
+      let modelUrl = rec.url || null;
+      if (!modelUrl && rec.file) modelUrl = await fileToBase64(rec.file);
+
+      const g = rec.group, rot = g.rotation;
+      const sceneData = {
+        meta: { title: (projectName || 'AR-Szene'), mode: (mode==='image'?'image':'surface') },
+        ...(mode==='image' ? { target: { mindUrl: target || '', previewUrl: '' } } : {}),
+        model: {
+          url: modelUrl,
+          position: [g.position.x, g.position.y, g.position.z],
+          rotation: [
+            THREE.MathUtils.radToDeg(rot.x),
+            THREE.MathUtils.radToDeg(rot.y),
+            THREE.MathUtils.radToDeg(rot.z)
+          ],
+          scale: [g.scale.x, g.scale.y, g.scale.z],
+          animation: "*"
+        },
+        lighting: { hemi: 1.2, dir: { intensity: 1.0, pos: [0,6,0] } }
+      };
+
+      const slug = (projectName||'scene').toLowerCase().replace(/[^a-z0-9_-]+/g,'-') || 'scene';
+      const fileName = `${slug}.json`;
+      const blob = new Blob([JSON.stringify(sceneData,null,2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = fileName; a.click();
+      setTimeout(()=>URL.revokeObjectURL(url), 1200);
+
+      const viewerBase = (mode==='image')
+        ? `${HOST}/image-ar/viewer.html`
+        : `${HOST}/surface-ar/webxr.html`;
+      const shareJsonUrl = `${HOST}/publish/${fileName}`;
+      const shareLink = `${viewerBase}?scene=${encodeURIComponent(shareJsonUrl)}`;
+
+      try{ await navigator.clipboard.writeText(shareLink); }catch{}
+      toast('Freigabe-Link kopiert:\n' + shareLink);
+
+      return { fileName, shareLink };
+    }
+
+    // Öffnet die Modul-Seiten (Pfade relativ zu /editor/)
+    async function publish(){
+      const HOST = 'https://krischihh.github.io/area';
+
+      const baseByMode = {
+        'surface-webxr': `${HOST}/surface-ar/webxr.html`,
+        'native':        `${HOST}/surface-ar/surface-viewer.html`,
+        'image':         `${HOST}/image-ar/viewer.html`
+      };
+
+      const mode   = $('#anchorMode')?.value || 'surface-webxr';
+      const target = ($('#imageTargetUrl')?.value || '').trim();
+
+      const rec = (state.selection.size===1 ? findRec(state.selectedId)
+                                            : state.objects.find(o=>!o.media)) || null;
+      if (!rec){ toast('Kein 3D-Objekt in der Szene.'); return; }
+
+      await exportSceneJSONForShare({ mode, target, rec, HOST });
+
+      const viewer = window.open(baseByMode[mode], '_blank');
+      if (!viewer){ toast('Popup blockiert? Bitte Popups erlauben.'); return; }
+
+      let glbBuffer = null;
+      try{
+        if (rec.file) {
+          glbBuffer = await rec.file.arrayBuffer();
+        } else if (rec.url) {
+          const res = await fetch(rec.url);
+          glbBuffer = await res.arrayBuffer();
+        } else {
+          toast('Keine Modellquelle gefunden.'); 
+          return;
+        }
+      } catch(e){
+        console.error(e); toast('Modell konnte nicht geladen werden.');
+        return;
+      }
+
+      const payload = {
+        type: 'webar-load',
+        mode,
+        target: mode==='image' ? target : null,
+        transform: {
+          px: rec.group.position.x, py: rec.group.position.y, pz: rec.group.position.z,
+          rx: rec.group.rotation.x, ry: rec.group.rotation.y, rz: rec.group.rotation.z,
+          sx: rec.group.scale.x,    sy: rec.group.scale.y,    sz: rec.group.scale.z
+        },
+        glbBuffer
+      };
+
+      function onReady(e){
+        if (e.origin !== 'https://krischihh.github.io') return;
+        if (e.data && e.data.type === 'webar-ready') {
+          window.removeEventListener('message', onReady);
+          viewer.postMessage(payload, 'https://krischihh.github.io', [glbBuffer]);
+        }
+      }
+      window.addEventListener('message', onReady);
+    }
+
+    // Projektmenü & Aktionen
+    (function(){
+      const menu = $('#projectMenu');
+      const btn  = $('#btn-project-menu');
+
+      function closeMenu(){
+        menu.classList.remove('open');
+        btn.setAttribute('aria-expanded','false');
+      }
+
+      btn.addEventListener('click', e=>{
+        e.stopPropagation();
+        menu.classList.toggle('open');
+        btn.setAttribute('aria-expanded', menu.classList.contains('open') ? 'true' : 'false');
+      });
+
+      document.addEventListener('click', e=>{
+        if (!menu.contains(e.target)) closeMenu();
+      });
+      window.addEventListener('keydown', e=>{
+        if (e.key === 'Escape') closeMenu();
+      });
+
+      $('#btn-new').addEventListener('click', ()=>{
+        closeMenu();
+        if(!confirm('Szene leeren und neues Projekt anlegen?')) return;
+        setProjectName(prompt('Projektname:', 'Neues AR-Projekt')||'Unbenanntes Projekt');
+        $('#btn-clear').click();
+      });
+
+      $('#btn-save').addEventListener('click', ()=>{
+        closeMenu();
+        saveProject({saveAs:false});
+      });
+
+      $('#btn-save-as').addEventListener('click', ()=>{
+        closeMenu();
+        saveProject({saveAs:true});
+      });
+
+      $('#file-project').addEventListener('change', e=>{
+        closeMenu();
+        const f=e.target.files?.[0];
+        if(!f){ e.target.value=''; return; }
+        importProjectFile(f);
+        e.target.value='';
+      });
+
+      $('#btn-publish').addEventListener('click', ()=>{
+        closeMenu();
+        publish();
+      });
+    })();
+
+    // Render + Hotkeys
+    const clock=new THREE.Clock();
+    function render(){
+      requestAnimationFrame(render);
+      const dt=clock.getDelta();
+      forEachRec(o=>{ if(o.mixer) o.mixer.update(dt); });
+      controls.update();
+      renderer.clear(); composer.render(); renderer.clearDepth(); renderer.render(overlayScene,camera);
+    }
+
+    setProjectName(projectName);
+    buildRoom(parseFloat($('#roomSize').value)||24);
+    let roomBuildRAF=0;
+    function scheduleRoomRebuild(){ if(roomBuildRAF) return; roomBuildRAF=requestAnimationFrame(()=>{ buildRoom(parseFloat($('#roomSize').value)||24); roomBuildRAF=0; }); }
+    $('#roomSize').addEventListener('input', scheduleRoomRebuild);
+    $('#gridIntensity').addEventListener('input', scheduleRoomRebuild);
+    $('#gridIntensity').addEventListener('change', scheduleRoomRebuild);
+    $('#gridVisible').addEventListener('change', ()=>{ const v=$('#gridVisible').checked; [gridNear,gridFar,axisX,axisZ].forEach(o=>o&&(o.visible=v)); });
+
+    requestAnimationFrame(()=> onResize());
+    updateToolButtons(); applySnap(); setSpace('local'); updateGroupButtons(); updateOutlineSelection();
+
+    // Hotkeys (Tools, Aktionen, Bookmarks)
+    window.addEventListener('keydown', (e)=>{
+      const t=e.target; if(t && (t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable)) return;
+      if(tcontrols?.dragging) return;
+      const k=e.key.toLowerCase();
+      if(k==='w') { tcontrols.setMode('translate'); updateToolButtons(); }
+      else if(k==='e') { tcontrols.setMode('rotate'); updateToolButtons(); }
+      else if(k==='r') { tcontrols.setMode('scale'); updateToolButtons(); }
+      else if(k==='d') { e.preventDefault(); $('#btn-duplicate').click(); }
+      else if(k==='f') { e.preventDefault(); $('#btn-floor').click(); }
+      else if(k==='delete'){ $('#btn-del').click(); }
+      else if(k==='g' && (e.ctrlKey||e.metaKey) && !e.shiftKey){ e.preventDefault(); $('#btn-group').click(); }
+      else if(k==='g' && (e.ctrlKey||e.metaKey) && e.shiftKey){ e.preventDefault(); $('#btn-ungroup').click(); }
+      // Bookmarks: 1–5 recall, Shift+1–5 save
+      else if(/^[1-5]$/.test(k)){
+        const i=parseInt(k,10)-1;
+        if(e.shiftKey) saveBookmark(i); else recallBookmark(i);
+      }
+    });
+
+    render();
   </script>
 </body>
 </html>
