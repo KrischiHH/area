@@ -1172,8 +1172,60 @@ const baseByMode = {
 
 
     // Hint FAB + Projektmenü identisch wie zuvor
-    (function(){ const hint=$('.hint'); const fab=$('#hintFab'); if(!hint||!fab) return; let timer=null; function open(){ if(timer){clearTimeout(timer);timer=null;} hint.classList.remove('hidden'); fab.setAttribute('aria-expanded','true'); fab.textContent='×'; } function close(){ if(timer){clearTimeout(timer);timer=null;} hint.classList.add('hidden'); fab.setAttribute('aria-expanded','false'); fab.textContent='i'; } fab.addEventListener('mouseenter', open); fab.addEventListener('mouseleave', ()=>{ timer=setTimeout(()=>{ if(!hint.matches(':hover')) close(); },200); }); hint.addEventListener('mouseleave', ()=>{ timer=setTimeout(()=>{ if(!fab.matches(':hover')) close(); },100); }); hint.addEventListener('mouseenter', ()=>{ if(timer){clearTimeout(timer);timer=null;} }); fab.addEventListener('click', e=>{ e.preventDefault(); if(hint.classList.contains('hidden')) open(); else close(); }, {passive:false}); })();
-    (function(){ const menu=$('#projectMenu'); const btn=$('#btn-project-menu'); function close(){ menu.classList.remove('open'); btn.setAttribute('aria-expanded','false'); } btn.addEventListener('click', e=>{ e.stopPropagation(); menu.classList.toggle('open'); btn.setAttribute('aria-expanded', menu.classList.contains('open')?'true':'false'); }); document.addEventListener('click', e=>{ if(!menu.contains(e.target)) close(); }); window.addEventListener('keydown', e=>{ if(e.key==='Escape') close(); }); $('#btn-new').addEventListener('click', ()=>{ close(); if(!confirm('Aktuelle Szene leeren und neues Projekt anlegen?')) return; setProjectName(prompt('Projektname:', 'Neues AR-Projekt')||'Unbenanntes Projekt'); $('#btn-clear').click(); }); $('#btn-save').addEventListener('click', ()=>{ close(); saveProject({saveAs:false}); }); $('#btn-save-as').addEventListener('click', ()=>{ close(); saveProject({saveAs:true}); }); $('#file-project').addEventListener('change', e=>{ close(); const f=e.target.files?.[0]; if(!f){ e.target.value=''; return;} importProjectFile(f); e.target.value=''; }); })();$('#btn-publish').addEventListener('click', ()=>{ close(); publish(); });
+(function(){
+  const menu = $('#projectMenu');
+  const btn  = $('#btn-project-menu');
+
+  // eindeutiger Name, nicht "close" (Verwechslung mit window.close)
+  function closeMenu(){
+    menu.classList.remove('open');
+    btn.setAttribute('aria-expanded','false');
+  }
+
+  btn.addEventListener('click', e=>{
+    e.stopPropagation();
+    menu.classList.toggle('open');
+    btn.setAttribute('aria-expanded', menu.classList.contains('open') ? 'true' : 'false');
+  });
+
+  document.addEventListener('click', e=>{
+    if (!menu.contains(e.target)) closeMenu();
+  });
+  window.addEventListener('keydown', e=>{
+    if (e.key === 'Escape') closeMenu();
+  });
+
+  $('#btn-new').addEventListener('click', ()=>{
+    closeMenu();
+    if(!confirm('Szene leeren und neues Projekt anlegen?')) return;
+    setProjectName(prompt('Projektname:', 'Neues AR-Projekt')||'Unbenanntes Projekt');
+    $('#btn-clear').click();
+  });
+
+  $('#btn-save').addEventListener('click', ()=>{
+    closeMenu();
+    saveProject({saveAs:false});
+  });
+
+  $('#btn-save-as').addEventListener('click', ()=>{
+    closeMenu();
+    saveProject({saveAs:true});
+  });
+
+  $('#file-project').addEventListener('change', e=>{
+    closeMenu();
+    const f=e.target.files?.[0];
+    if(!f){ e.target.value=''; return; }
+    importProjectFile(f);
+    e.target.value='';
+  });
+
+  // 👉 Publish-Button HIER anbinden (innerhalb der IIFE!)
+  $('#btn-publish').addEventListener('click', ()=>{
+    closeMenu();
+    publish();          // ruft deine publish()-Funktion auf
+  });
+})();
 
     // Render
     const clock=new THREE.Clock();
