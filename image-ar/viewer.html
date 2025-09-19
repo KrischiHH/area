@@ -1,309 +1,90 @@
-<!doctype html>
-<html lang="de">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
-<title>Image Viewer – AR (schneller Scanner-Start)</title>
+<script type="module">
+  import * as THREE from 'three';
+  import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-<!-- Preconnects, damit Ressourcen schneller kommen -->
-<link rel="preconnect" href="https://aframe.io" crossorigin>
-<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-<link rel="preconnect" href="https://unpkg.com" crossorigin>
+  const loader = new GLTFLoader();
+  loader.setCrossOrigin('anonymous');
 
-<style>
-  *,*::before,*::after{box-sizing:border-box}
-  html,body{
-    margin:0;height:100%;
-    background:#000;color:#fff;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;
-    overflow:hidden;overscroll-behavior:none;touch-action:manipulation;
-    -webkit-user-select:none;user-select:none;
+  const scene = window.scene || new THREE.Scene();
+  let modelRoot = new THREE.Group();
+  scene.add(modelRoot);
+
+  function disposeObject3D(root){
+    root.traverse(n=>{
+      if(n.isMesh){
+        n.geometry?.dispose?.();
+        const mats = Array.isArray(n.material) ? n.material : [n.material];
+        mats.forEach(m=>{
+          if(!m) return;
+          ['map','normalMap','metalnessMap','roughnessMap','emissiveMap','aoMap','alphaMap','envMap','specularMap','bumpMap','displacementMap']
+            .forEach(k => m[k]?.dispose?.());
+          m.dispose?.();
+        });
+      }
+    });
+  }
+  function clearModel(){ modelRoot.children.forEach(c=>disposeObject3D(c)); modelRoot.clear(); }
+  function applyTransform(group, t={}){
+    group.position.set(+t.px||0, +t.py||0, +t.pz||0);
+    group.rotation.set(+t.rx||0, +t.ry||0, +t.rz||0);
+    group.scale.set(+t.sx||1, +t.sy||1, +t.sz||1);
+  }
+  async function loadGLBFromURL(glbURL, transform){
+    return new Promise((resolve,reject)=>{
+      loader.load(glbURL, (gltf)=>{
+        clearModel();
+        const root = gltf.scene || gltf.scenes?.[0];
+        modelRoot.add(root);
+        applyTransform(modelRoot, transform);
+        resolve(root);
+      }, undefined, reject);
+    });
   }
 
-  /* A-Frame UI ausblenden + Canvas transparent */
-  .a-enter-vr,.a-enter-vr-button,.a-modal{display:none!important}
-  a-scene, canvas.a-canvas { background: transparent !important; }
+  // OPTIONAL: Falls du im Image-Viewer eine Funktion/Variable für das Target hast:
+  // Implementiere diese zwei Zeilen in deiner MindAR/AR.js-Initialisierung:
+  // window.setImageTargetUrl = (url)=>{ /* hier dein Target (.mind) zuweisen */ };
 
-  /* Ebenen: 0 Video (Preview/MindAR), 1 Canvas, 2 ScanUI+Hint, 3 Overlay, 4 Error */
-  #videoLayer{position:fixed;inset:0;z-index:0;width:100vw;height:100svh;background:#000}
-  #videoLayer video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;display:block}
-  #poster{position:absolute;inset:0;background:center/cover no-repeat url("/area/assets/targets/target.png?v=1")}
+  const TARGET_ORIGIN = location.origin;
+  try { window.opener && window.opener.postMessage({ type:'webar-ready' }, TARGET_ORIGIN); } catch {}
 
-  a-scene{position:fixed;inset:0;z-index:1}
+  window.addEventListener('message', async (e)=>{
+    if (e.origin !== TARGET_ORIGIN) return;
+    const msg = e.data || {};
+    if (msg.type !== 'webar-load') return;
 
-  /* --- Eigenes Scanner-UI (sichtbar bis targetFound) --- */
-  #scanUI{
-    position:fixed;inset:0;z-index:2;pointer-events:none;display:none;
-    padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right))
-            max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));
-  }
-  #scanUI .frame{
-    position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
-    width:min(70vw, 480px);height:min(45vh, 360px);
-  }
-  #scanUI .corner{position:absolute;width:28px;height:28px;border:3px solid rgba(255,255,255,.9)}
-  #scanUI .tl{left:-3px;top:-3px;border-right:none;border-bottom:none;border-top-left-radius:12px}
-  #scanUI .tr{right:-3px;top:-3px;border-left:none;border-bottom:none;border-top-right-radius:12px}
-  #scanUI .bl{left:-3px;bottom:-3px;border-right:none;border-top:none;border-bottom-left-radius:12px}
-  #scanUI .br{right:-3px;bottom:-3px;border-left:none;border-top:none;border-bottom-right-radius:12px}
-  #scanUI .msg{
-    position:absolute;left:50%;top:calc(100% + 10px);transform:translateX(-50%);
-    background:rgba(0,0,0,.55);padding:8px 10px;border-radius:10px;font-size:14px
-  }
+    try{
+      if (msg.mode === 'image' && msg.target && typeof window.setImageTargetUrl === 'function'){
+        window.setImageTargetUrl(msg.target);
+      }
+      const blob = new Blob([msg.glbBuffer], { type:'model/gltf-binary' });
+      const url  = URL.createObjectURL(blob);
+      await loadGLBFromURL(url, msg.transform || {});
+      setTimeout(()=> URL.revokeObjectURL(url), 30000);
+      console.log('[image-viewer] Modell per postMessage geladen');
+    }catch(err){
+      console.error('[image-viewer] Laden fehlgeschlagen', err);
+    }
+  });
 
-  /* Hint oben rechts */
-  #hint{
-    position:fixed;right:max(12px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));
-    z-index:2;pointer-events:none;display:none
-  }
-  #hint img{width:min(28vw,180px);height:auto;border-radius:12px;opacity:.92;box-shadow:0 6px 18px rgba(0,0,0,.35)}
-
-  /* Overlay-Kachel (Aero-Stil) */
-  #overlay{
-    position:fixed;inset:0;z-index:3;display:grid;place-items:center;
-    padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right))
-            max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
-    background:linear-gradient(180deg,rgba(0,0,0,.55),rgba(0,0,0,.35));
-    transition:opacity .12s ease-out, visibility .12s ease-out; /* schneller */
-  }
-  #overlay.hidden{opacity:0;visibility:hidden}
-  .card{
-    width:min(92vw,520px);max-height:min(80svh,700px);
-    display:flex;flex-direction:column;gap:12px;
-    border-radius:16px;padding:16px;background:rgba(255,255,255,.06);
-    border:1px solid rgba(255,255,255,.15);box-shadow:0 10px 30px rgba(0,0,0,.35)
-  }
-  .card img{width:100%;max-height:44svh;object-fit:cover;border-radius:12px}
-  .card h2{margin:4px 0 0;font-size:18px}
-  .tips{margin:0;padding-left:18px;opacity:.9}
-  .tips li{margin:2px 0}
-  .btn{padding:12px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:#111;color:#fff;width:100%}
-
-  /* Error-Badge */
-  #err{position:fixed;left:12px;top:12px;z-index:4;background:#b00020;padding:8px 10px;border-radius:8px;display:none;font:12px/1.35 monospace}
-
-  /* Fallback für Browser ohne svh */
-  @supports not (height:100svh){
-    html,body,#videoLayer,a-scene{height:calc(var(--vh,1vh)*100)}
-  }
-</style>
-
-<!-- Libs -->
-<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-<script src="https://unpkg.com/aframe-extras@6.1.1/dist/aframe-extras.min.js"></script>
-</head>
-<body>
-  <!-- 0) Kamera-Preview (läuft sofort) -->
-  <div id="videoLayer">
-    <div id="poster"></div>
-    <video id="preview" autoplay muted playsinline></video>
-  </div>
-
-  <!-- 1) Eigenes Scanner-UI + Hint -->
-  <div id="scanUI">
-    <div class="frame">
-      <div class="corner tl"></div><div class="corner tr"></div>
-      <div class="corner bl"></div><div class="corner br"></div>
-      <div class="msg">Suche dieses Bild…</div>
-    </div>
-  </div>
-  <div id="hint"><img id="hintImg" alt="Referenzbild"></div>
-
-  <!-- 2) Overlay-Kachel -->
-  <div id="overlay" role="dialog" aria-modal="true">
-    <div class="card">
-      <img id="overlayImg" alt="Szenenbild">
-      <h2 id="overlayTitle">AR-Erlebnis starten</h2>
-      <ul class="tips" id="overlayTips">
-        <li>Achten Sie auf Ihre Umgebung.</li>
-        <li>Richten Sie die Kamera auf das Bild.</li>
-        <li>Gute Beleuchtung verbessert das Tracking.</li>
-      </ul>
-      <button id="startBtn" class="btn">OK – Scanner starten</button>
-    </div>
-  </div>
-
-  <div id="err"></div>
-
-<script>
-/* ------------ Viewport Fallback ------------ */
-(function fixVH(){
-  function setVH(){ document.documentElement.style.setProperty('--vh', (window.innerHeight*0.01)+'px'); }
-  setVH(); addEventListener('resize', setVH, {passive:true});
-})();
-
-/* ------------ Szene laden: ?scene=<URL> ------------ */
-const qs = new URLSearchParams(location.search);
-const sceneUrl = qs.get('scene');
-const showErr = (m)=>{ const el=document.getElementById('err'); el.textContent=m; el.style.display='block'; };
-
-let cfg = {
-  meta: { version:"1.0", mode:"image", title:null, tips:null },
-  target: { mindUrl:"/area/assets/targets/target.mind", previewUrl:"/area/assets/targets/target.png" },
-  model:  { url:"https://modelviewer.dev/shared-assets/models/Astronaut.glb",
-            position:[0,0,0.05], rotation:[0,0,0], scale:[0.6,0.6,0.6], animation:"*" },
-  lighting: { hemi:1.2, dir:{ intensity:1.0, pos:[0,6,0] } },
-  audio: { url:null, loop:true, volume:0.8, autoplayOnTarget:false }
-};
-
-(async () => {
-  if (!sceneUrl){ showErr('Fehlender Parameter ?scene=<URL zu scene.json>'); }
-  else {
-    try {
-      const res = await fetch(sceneUrl, {cache:'no-cache'}); // keine harte "no-store" Bremse
-      if (!res.ok) throw new Error(res.status+' '+res.statusText);
-      const j = await res.json();
-      cfg = Object.assign({}, cfg, j, {
-        target:   Object.assign({}, cfg.target,   j.target   ||{}),
-        model:    Object.assign({}, cfg.model,    j.model    ||{}),
-        lighting: Object.assign({}, cfg.lighting, j.lighting ||{}),
-        audio:    Object.assign({}, cfg.audio,    j.audio    ||{})
-      });
-    } catch(e){ showErr('scene.json konnte nicht geladen werden: '+e.message); }
-  }
-  // Bilder/Texts setzen (stabile Cache-Buster-Variante)
-  const prev = cfg.target?.previewUrl || "/area/assets/targets/target.png";
-  document.getElementById('hintImg').src    = prev + (prev.includes('?')?'&':'?') + 'v=1';
-  document.getElementById('overlayImg').src = prev + (prev.includes('?')?'&':'?') + 'v=1';
-  if (cfg.meta?.title) document.getElementById('overlayTitle').textContent = cfg.meta.title;
-  if (Array.isArray(cfg.meta?.tips) && cfg.meta.tips.length){
-    document.getElementById('overlayTips').innerHTML = cfg.meta.tips.map(t=>`<li>${t}</li>`).join('');
-  }
-})();
-
-/* ------------ Sofort: leichte Kamera-Preview ------------ */
-const videoLayer = document.getElementById('videoLayer');
-const previewVideo = document.getElementById('preview');
-const poster       = document.getElementById('poster');
-
-async function startPreview(){
-  try{
-    const constraints = {
-      video: {
-        facingMode: { ideal: 'environment' },
-        width:  { ideal: 1280, max: 1280 },
-        height: { ideal: 720,  max: 720  },
-        frameRate: { ideal: 24, max: 30 }
-      },
-      audio:false
+  // Fallback via Query
+  (async function(){
+    const q = new URLSearchParams(location.search);
+    const glb = q.get('glb');
+    if (!glb) return;
+    if (q.get('target') && typeof window.setImageTargetUrl === 'function'){
+      window.setImageTargetUrl(q.get('target'));
+    }
+    const transform = {
+      px:+q.get('px')||0, py:+q.get('py')||0, pz:+q.get('pz')||0,
+      rx:+q.get('rx')||0, ry:+q.get('ry')||0, rz:+q.get('rz')||0,
+      sx:+q.get('sx')||1, sy:+q.get('sy')||1, sz:+q.get('sz')||1,
     };
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    previewVideo.srcObject = stream;
-    poster.style.display = 'none';
-  }catch(e){
-    console.warn('Preview-Start fehlgeschlagen:', e);
-    // Poster bleibt sichtbar
-  }
-}
-startPreview();
-
-function stopPreview(){
-  const s = previewVideo.srcObject;
-  if (s && s.getTracks) s.getTracks().forEach(t=>t.stop());
-  previewVideo.srcObject = null;
-  previewVideo.style.display = 'none';
-}
-
-/* ------------ MindAR-Video optional übernehmen (nicht blockierend) ------------ */
-function tryAttachMindarVideoNonBlocking(maxWaitMs=4000){
-  const t0 = performance.now();
-  (function poll(){
-    const v = document.getElementById('mindar-image-video')
-         || document.querySelector('video#mindar-image-video')
-         || [...document.querySelectorAll('video')].find(el => /mindar/i.test(el.id));
-    if (v){
-      v.setAttribute('playsinline',''); v.muted = true; v.autoplay = true;
-      if (v.parentNode !== videoLayer) videoLayer.appendChild(v);
-      Object.assign(v.style,{position:'absolute',inset:'0',width:'100%',height:'100%',objectFit:'cover',objectPosition:'center',display:'block'});
-      stopPreview(); // jetzt Preview beenden
-      return;
+    try{
+      await loadGLBFromURL(glb, transform);
+      console.log('[image-viewer] Modell aus Query geladen');
+    }catch(err){
+      console.error('[image-viewer] Query-Laden fehlgeschlagen', err);
     }
-    if (performance.now() - t0 > maxWaitMs) return; // einfach weiter mit Preview
-    requestAnimationFrame(poll);
   })();
-}
-
-/* ------------ Flow: Overlay → MindAR lazy starten ------------ */
-const overlay   = document.getElementById('overlay');
-const startBtn  = document.getElementById('startBtn');
-const hint      = document.getElementById('hint');
-const scanUI    = document.getElementById('scanUI');
-
-/* Defensive: A-Frame VR Elemente sofort entfernen */
-new MutationObserver(()=>document.querySelectorAll('.a-enter-vr,.a-enter-vr-button,.a-modal').forEach(el=>el.remove()))
-  .observe(document.documentElement,{childList:true,subtree:true});
-
-async function buildAndStartMindAR(){
-  const scene = document.createElement('a-scene');
-  scene.setAttribute('embedded','');
-  scene.setAttribute('renderer','alpha:true; antialias:false; precision:mediump; physicallyCorrectLights:false; sortObjects:true');
-  scene.setAttribute('vr-mode-ui','enabled:false');
-  scene.setAttribute('device-orientation-permission-ui','enabled:true');
-  scene.style.position='fixed'; scene.style.inset='0'; scene.style.zIndex='1';
-
-  /* Wir nutzen EIGENES Scan-UI → MindAR-UI aus */
-  scene.setAttribute('mindar-image', `imageTargetSrc: ${cfg.target.mindUrl}; uiScanning: false; uiLoading: false`);
-
-  // Kamera
-  const cam = document.createElement('a-camera');
-  cam.setAttribute('look-controls','enabled:false');
-  scene.appendChild(cam);
-
-  // leichtes Licht
-  const hemi = document.createElement('a-entity');
-  hemi.setAttribute('light', `type:hemisphere; intensity:${cfg.lighting?.hemi ?? 1.2}`);
-  scene.appendChild(hemi);
-
-  // Marker + Modell
-  const marker = document.createElement('a-entity');
-  marker.setAttribute('mindar-image-target','targetIndex: 0');
-
-  const model = document.createElement('a-gltf-model');
-  model.setAttribute('src', cfg.model.url);
-  if (cfg.model.position) model.setAttribute('position', cfg.model.position.join(' '));
-  if (cfg.model.rotation) model.setAttribute('rotation', cfg.model.rotation.join(' '));
-  if (cfg.model.scale)    model.setAttribute('scale',    cfg.model.scale.join(' '));
-  if (cfg.model.animation && cfg.model.animation !== 'none'){
-    model.setAttribute('animation-mixer', `clip:${cfg.model.animation}; loop:repeat`);
-  }
-  marker.appendChild(model);
-  scene.appendChild(marker);
-  document.body.appendChild(scene);
-
-  // Scanner/Hint steuern
-  const showScanning = ()=>{ scanUI.style.display='block'; hint.style.display='block'; };
-  const hideScanning = ()=>{ scanUI.style.display='none';  hint.style.display='none';  };
-  marker.addEventListener('targetFound', hideScanning);
-  marker.addEventListener('targetLost',  showScanning);
-
-  // MindAR parallel starten – UI blockiert NICHT
-  scene.addEventListener('loaded', async ()=>{
-    const sys = scene.systems['mindar-image-system'];
-    try {
-      await sys.start();
-    } catch (e) {
-      showErr('MindAR konnte nicht gestartet werden: ' + e.message);
-      return;
-    }
-    // MindAR-Video optional übernehmen (nicht blockierend)
-    tryAttachMindarVideoNonBlocking(4000);
-
-    // Akku sparen
-    document.addEventListener('visibilitychange', () => {
-      try { document.hidden ? sys.stop() : sys.start(); } catch {}
-    }, {passive:true});
-  }, {once:true});
-}
-
-startBtn.addEventListener('click', ()=>{
-  // 1) Overlay sofort ausblenden
-  overlay.classList.add('hidden');
-  // 2) Scanner-UI + Hint SOFORT anzeigen (kein Warten mehr)
-  scanUI.style.display = 'block';
-  hint.style.display   = 'block';
-  // 3) MindAR im Hintergrund initialisieren
-  buildAndStartMindAR();
-});
 </script>
-</body>
-</html>
