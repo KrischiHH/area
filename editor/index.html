@@ -1139,106 +1139,57 @@ $('#anchorMode')?.addEventListener('change', updateAnchorUI);
 
 // Öffnet DEINE Modul-Seiten (Pfade relativ zu /editor/)
 async function publish(){
-  // 1) Zielseiten (GitHub Pages)
-  const HOST = 'https://krischihh.github.io/area';
+  const HOST = 'https://krischihh.github.io/area';  // deine Pages
   const baseByMode = {
     'surface-webxr': `${HOST}/surface-ar/webxr.html`,
-    'native':        `${HOST}/surface-ar/index.html`,
+    'native':        `${HOST}/surfaces-ar/surface-viewer.html`,
     'image':         `${HOST}/image-ar/viewer.html`
   };
 
-  // 2) UI-Werte
   const mode   = $('#anchorMode')?.value || 'surface-webxr';
   const target = ($('#imageTargetUrl')?.value || '').trim();
-  const nativeGlb  = ($('#nativeGlbUrl')?.value  || '').trim();
-  const nativeUsdz = ($('#nativeUsdzUrl')?.value || '').trim();
 
-  // 3) Hilfsfunktionen
-  function firstRenderableObject(){
-    // bevorzugt aktuelle Auswahl, sonst erstes Objekt ohne Media
-    if (state.selection.size === 1) {
-      const rec = findRec(state.selectedId);
-      if (rec && !rec.media) return rec;
-    }
-    return state.objects.find(o => !o.media) || null;
-  }
+  // 1) Erstes nicht-Media Objekt nehmen (wie bei dir)
+  const rec = (state.selection.size===1 ? findRec(state.selectedId) : state.objects.find(o=>!o.media)) || null;
+  if (!rec){ toast('Kein 3D-Objekt in der Szene.'); return; }
 
-  async function getGlbSrc(rec){
-    // Quelle für das Modell:
-    // - importierte Datei -> als data:URL (cross-origin lesbar)
-    // - bereits eingebettete Base64 -> direkt
-    // - http(s)-URL -> direkt
-    if (!rec) return null;
-    if (rec.file) {
-      // große Dateien => URL wird lang; für Vorschau ok
-      return await (async f => new Promise((res,rej)=>{
-        const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(f);
-      }))(rec.file);
-    }
-    if (rec.url) return rec.url; // kann data: oder https: sein
-    return null;
-  }
+  // 2) Viewer ohne lange Query öffnen
+  const viewer = window.open(baseByMode[mode], '_blank');
 
-  function transformQueryFrom(rec){
-    const g = rec.group;
-    const q = new URLSearchParams();
-    q.set('px', g.position.x.toFixed(6));
-    q.set('py', g.position.y.toFixed(6));
-    q.set('pz', g.position.z.toFixed(6));
-    q.set('rx', g.rotation.x.toFixed(6)); // RAD
-    q.set('ry', g.rotation.y.toFixed(6));
-    q.set('rz', g.rotation.z.toFixed(6));
-    q.set('sx', g.scale.x.toFixed(6));    // uniform in unserem Editor
-    q.set('sy', g.scale.y.toFixed(6));
-    q.set('sz', g.scale.z.toFixed(6));
-    return q;
-  }
-
-  // 4) URL bauen je Modus
-  let url = baseByMode[mode];
-
-  if (mode === 'native') {
-    // Native: du lieferst die URLs selbst (GLB/Scene Viewer, USDZ/Quick Look)
-    const qp = new URLSearchParams();
-    if (nativeGlb)  qp.set('glb',  nativeGlb);
-    if (nativeUsdz) qp.set('usdz', nativeUsdz);
-
-    // optional: erste Transform aus Szene mitschicken (falls dein Native-Viewer das nutzt)
-    const rec = firstRenderableObject();
-    if (rec) {
-      const t = transformQueryFrom(rec);
-      t.forEach((v,k)=> qp.set(k, v));
-    }
-
-    const qs = qp.toString();
-    window.open(qs ? `${url}?${qs}` : url, '_blank');
+  // 3) GLB als ArrayBuffer (Transferable)
+  let glbBuffer = null;
+  if (rec.file) {
+    glbBuffer = await rec.file.arrayBuffer();
+  } else if (rec.url) {
+    const res = await fetch(rec.url);     // data: oder https: funktioniert
+    glbBuffer = await res.arrayBuffer();
+  } else {
+    toast('Keine Modellquelle gefunden.'); 
     return;
   }
 
-  // WebXR oder Image: nimm GLB aus Szene
-  const rec = firstRenderableObject();
-  if (!rec) { toast('Kein 3D-Objekt in der Szene. Bitte erst ein GLB importieren.'); return; }
+  const payload = {
+    type: 'webar-load',
+    mode,
+    target: mode==='image' ? target : null,
+    transform: {
+      px: rec.group.position.x, py: rec.group.position.y, pz: rec.group.position.z,
+      rx: rec.group.rotation.x, ry: rec.group.rotation.y, rz: rec.group.rotation.z,
+      sx: rec.group.scale.x,    sy: rec.group.scale.y,    sz: rec.group.scale.z
+    },
+    glbBuffer
+  };
 
-  const glbSrc = await getGlbSrc(rec);
-  if (!glbSrc) { toast('Konnte Modellquelle nicht bestimmen.'); return; }
-
-  const qp = new URLSearchParams();
-  qp.set('glb', glbSrc);
-
-  // Transform anhängen
-  const t = transformQueryFrom(rec);
-  t.forEach((v,k)=> qp.set(k, v));
-
-  // Image Trigger braucht zusätzlich das Target
-  if (mode === 'image') {
-    if (!target) { toast('Bitte Target (.mind) angeben.'); return; }
-    qp.set('target', target); // Tipp: ggf. absolute URL verwenden
+  // 4) Handshake: Auf „ready“ vom Viewer warten, dann senden
+  function onReady(e){
+    if (e.origin !== 'https://krischihh.github.io') return;            // Sicherheit: nur dein Viewer
+    if (e.data && e.data.type === 'webar-ready') {
+      window.removeEventListener('message', onReady);
+      viewer.postMessage(payload, 'https://krischihh.github.io', [glbBuffer]); // Transferable!
+    }
   }
-
-  window.open(`${url}?${qp.toString()}`, '_blank');
+  window.addEventListener('message', onReady);
 }
-
-// ===== Ende Anchor/Publish =====
 
 
     // Hint FAB + Projektmenü identisch wie zuvor
