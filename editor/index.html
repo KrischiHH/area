@@ -1139,35 +1139,105 @@ $('#anchorMode')?.addEventListener('change', updateAnchorUI);
 
 // Öffnet DEINE Modul-Seiten (Pfade relativ zu /editor/)
 async function publish(){
-  const data = await buildProjectData();                         // existiert bereits
-  const blob = new Blob([JSON.stringify(data)], {type:'application/json'});
-  const src  = URL.createObjectURL(blob);                        // Sofort-Vorschau
+  // 1) Zielseiten (GitHub Pages)
+  const HOST = 'https://krischihh.github.io/area';
+  const baseByMode = {
+    'surface-webxr': `${HOST}/surface-ar/webxr.html`,
+    'native':        `${HOST}/surfaces-ar/surface-viewer.html`,
+    'image':         `${HOST}/image-ar/viewer.html`
+  };
 
+  // 2) UI-Werte
   const mode   = $('#anchorMode')?.value || 'surface-webxr';
   const target = ($('#imageTargetUrl')?.value || '').trim();
-  const glb    = ($('#nativeGlbUrl')?.value  || '').trim();
-  const usdz   = ($('#nativeUsdzUrl')?.value || '').trim();
+  const nativeGlb  = ($('#nativeGlbUrl')?.value  || '').trim();
+  const nativeUsdz = ($('#nativeUsdzUrl')?.value || '').trim();
 
-  // >>> deine Modul-Pfade (von /editor/ aus eine Ebene hoch):
-  const HOST = 'https://krischihh.github.io/area';
-const baseByMode = {
-  'surface-webxr': `${HOST}/surface-ar/webxr.html`,
-  'native':        `${HOST}/surfaces-ar/surface-viewer.html`,
-  'image':         `${HOST}/image-ar/viewer.html`
-};
-
-  let url = `${baseByMode[mode]}?src=${encodeURIComponent(src)}&anchor=${encodeURIComponent(mode)}`;
-  if (mode === 'image' && target) {
-    url += `&target=${encodeURIComponent(target)}`;
+  // 3) Hilfsfunktionen
+  function firstRenderableObject(){
+    // bevorzugt aktuelle Auswahl, sonst erstes Objekt ohne Media
+    if (state.selection.size === 1) {
+      const rec = findRec(state.selectedId);
+      if (rec && !rec.media) return rec;
+    }
+    return state.objects.find(o => !o.media) || null;
   }
+
+  async function getGlbSrc(rec){
+    // Quelle für das Modell:
+    // - importierte Datei -> als data:URL (cross-origin lesbar)
+    // - bereits eingebettete Base64 -> direkt
+    // - http(s)-URL -> direkt
+    if (!rec) return null;
+    if (rec.file) {
+      // große Dateien => URL wird lang; für Vorschau ok
+      return await (async f => new Promise((res,rej)=>{
+        const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(f);
+      }))(rec.file);
+    }
+    if (rec.url) return rec.url; // kann data: oder https: sein
+    return null;
+  }
+
+  function transformQueryFrom(rec){
+    const g = rec.group;
+    const q = new URLSearchParams();
+    q.set('px', g.position.x.toFixed(6));
+    q.set('py', g.position.y.toFixed(6));
+    q.set('pz', g.position.z.toFixed(6));
+    q.set('rx', g.rotation.x.toFixed(6)); // RAD
+    q.set('ry', g.rotation.y.toFixed(6));
+    q.set('rz', g.rotation.z.toFixed(6));
+    q.set('sx', g.scale.x.toFixed(6));    // uniform in unserem Editor
+    q.set('sy', g.scale.y.toFixed(6));
+    q.set('sz', g.scale.z.toFixed(6));
+    return q;
+  }
+
+  // 4) URL bauen je Modus
+  let url = baseByMode[mode];
+
   if (mode === 'native') {
-    if (glb)  url += `&glb=${encodeURIComponent(glb)}`;
-    if (usdz) url += `&usdz=${encodeURIComponent(usdz)}`;
+    // Native: du lieferst die URLs selbst (GLB/Scene Viewer, USDZ/Quick Look)
+    const qp = new URLSearchParams();
+    if (nativeGlb)  qp.set('glb',  nativeGlb);
+    if (nativeUsdz) qp.set('usdz', nativeUsdz);
+
+    // optional: erste Transform aus Szene mitschicken (falls dein Native-Viewer das nutzt)
+    const rec = firstRenderableObject();
+    if (rec) {
+      const t = transformQueryFrom(rec);
+      t.forEach((v,k)=> qp.set(k, v));
+    }
+
+    const qs = qp.toString();
+    window.open(qs ? `${url}?${qs}` : url, '_blank');
+    return;
   }
 
-  // Hinweis: WebXR braucht HTTPS/localhost. blob:-src ist nur lokal teilbar.
-  window.open(url, '_blank');
+  // WebXR oder Image: nimm GLB aus Szene
+  const rec = firstRenderableObject();
+  if (!rec) { toast('Kein 3D-Objekt in der Szene. Bitte erst ein GLB importieren.'); return; }
+
+  const glbSrc = await getGlbSrc(rec);
+  if (!glbSrc) { toast('Konnte Modellquelle nicht bestimmen.'); return; }
+
+  const qp = new URLSearchParams();
+  qp.set('glb', glbSrc);
+
+  // Transform anhängen
+  const t = transformQueryFrom(rec);
+  t.forEach((v,k)=> qp.set(k, v));
+
+  // Image Trigger braucht zusätzlich das Target
+  if (mode === 'image') {
+    if (!target) { toast('Bitte Target (.mind) angeben.'); return; }
+    qp.set('target', target); // Tipp: ggf. absolute URL verwenden
+  }
+
+  window.open(`${url}?${qp.toString()}`, '_blank');
 }
+
 // ===== Ende Anchor/Publish =====
 
 
@@ -1220,12 +1290,13 @@ const baseByMode = {
     e.target.value='';
   });
 
-  // 👉 Publish-Button HIER anbinden (innerhalb der IIFE!)
   $('#btn-publish').addEventListener('click', ()=>{
-    closeMenu();
-    publish();          // ruft deine publish()-Funktion auf
-  });
-})();
+  closeMenu();
+  publish();
+});
+
+
+ 
 
     // Render
     const clock=new THREE.Clock();
