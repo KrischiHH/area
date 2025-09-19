@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AREA Viewer</title>
+<style>
+  html,body{margin:0;height:100%;background:#0b1323;color:#e9ecf5;font:14px/1.45 system-ui,Segoe UI,Inter,Roboto,Arial,sans-serif}
+  .ui{position:fixed;left:12px;right:12px;top:12px;display:flex;justify-content:space-between;z-index:10;pointer-events:none}
+  .pill{pointer-events:auto;background:#0b1220cc;border:1px solid #24314a;border-radius:999px;padding:6px 10px}
+  .reticle{position:absolute;left:50%;top:50%;width:48px;height:48px;margin:-24px 0 0 -24px;border-radius:999px;border:2px solid #93c5fd44;box-shadow:0 0 0 2px #93c5fd22 inset;display:none;z-index:5}
+  .hint{position:fixed;left:12px;right:12px;bottom:12px;background:#0b1220cc;border:1px solid #24314a;border-radius:10px;padding:10px;color:#9fb3d9}
+  canvas{display:block}
+  .btn{pointer-events:auto;background:#111828;border:1px solid #24314a;color:#e9ecf5;padding:8px 10px;border-radius:10px;cursor:pointer;font-weight:700}
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div class="ui">
+  <div class="pill" id="modePill">Viewer</div>
+  <button class="btn" id="btnRecenter" style="display:none">Neu platzieren</button>
+</div>
+<div class="reticle" id="reticle"></div>
+<div class="hint" id="hint">Lade…</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { ARButton } from 'three/addons/webxr/ARButton.js';
+
+const $ = s=>document.querySelector(s);
+const P  = new URLSearchParams(location.search);
+const SRC   = P.get('src');
+const ANCH  = P.get('anchor') || 'surface-webxr';
+const TARGET= P.get('target');
+const GLB   = P.get('glb');
+const USDZ  = P.get('usdz');
+
+$('#modePill').textContent = ANCH.toUpperCase().replace('-',' ');
+function toast(t){ $('#hint').textContent=t; }
+function showReticle(v){ $('#reticle').style.display = v?'block':'none'; }
+
+async function fetchJSON(u){ const r=await fetch(u); return r.json(); }
+async function blobFromDataUrl(dataUrl){ const r=await fetch(dataUrl); return await r.blob(); }
+
+const gltfLoader = new GLTFLoader();
+const draco = new DRACOLoader(); draco.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/'); gltfLoader.setDRACOLoader(draco);
+
+async function loadWebarAsGroup(srcUrl){
+  const data = await fetchJSON(srcUrl);
+  const root = new THREE.Group(); root.name = data?.meta?.projectName || 'Scene';
+  for(const o of (data.objects||[])){
+    let g = new THREE.Group(); g.name = o.name || 'Objekt';
+    if(o.asset){
+      const blob = await blobFromDataUrl(o.asset);
+      const url = URL.createObjectURL(blob);
+      const gltf = await gltfLoader.loadAsync(url);
+      URL.revokeObjectURL(url);
+      const model = gltf.scene || gltf.scenes?.[0];
+      g.add(model);
+    }
+    const t=o.transform||{position:[0,0,0], rotationDeg:[0,0,0], scale:1};
+    g.position.set(t.position[0],t.position[1],t.position[2]);
+    g.rotation.set(THREE.MathUtils.degToRad(t.rotationDeg[0]), THREE.MathUtils.degToRad(t.rotationDeg[1]), THREE.MathUtils.degToRad(t.rotationDeg[2]));
+    g.scale.setScalar(t.scale||1);
+    root.add(g);
+  }
+  return root;
+}
+
+function goNativeOrFallback(){
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+  if(isIOS && USDZ){ location.href = USDZ; return true; }
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  if(isAndroid && GLB){
+    const intent = `intent://arvr.google.com/scene-viewer/1.0?file=${encodeURIComponent(GLB)}&mode=ar_preferred#Intent;scheme=https;package=com.google.ar.core;action=android.intent.action.VIEW;end;`;
+    location.href = intent; return true;
+  }
+  return false;
+}
+
+if(ANCH==='native'){
+  toast('Öffne Native-AR…');
+  const opened = goNativeOrFallback();
+  if(!opened){ toast('Kein Native-Asset – starte WebXR als Fallback.'); }
+}
+
+if(ANCH==='image'){
+  const s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/mind-ar@1.3.0/dist/mindar-image-three.prod.js';
+  s.onload = ()=> startImage();
+  document.head.appendChild(s);
+} else {
+  startWebXR();
+}
+
+async function startWebXR(){
+  if(!SRC){ toast('Fehlender src-Parameter'); return; }
+  toast('Tippe auf die Ebene, um zu platzieren.');
+
+  const renderer = new THREE.WebGLRenderer({antialias:true,alpha:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.xr.enabled = true;
+  document.body.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.01, 100);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+  const dir = new THREE.DirectionalLight(0xffffff, 0.9); dir.position.set(1,2,1); scene.add(dir);
+
+  const group = await loadWebarAsGroup(SRC);
+  group.visible = false; scene.add(group);
+
+  let hitTestSource=null, refSpace=null, placed=false;
+  document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures:['hit-test'] }));
+  const session = await renderer.xr.getSession();
+  const viewerSpace = await session.requestReferenceSpace('viewer');
+  refSpace = await session.requestReferenceSpace('local');
+  hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
+
+  const reticle = new THREE.Mesh(
+    new THREE.RingGeometry(0.08,0.1,32).rotateX(-Math.PI/2),
+    new THREE.MeshBasicMaterial({color:'#93c5fd',transparent:true,opacity:0.85})
+  );
+  reticle.matrixAutoUpdate=false; reticle.visible=false; scene.add(reticle);
+
+  session.addEventListener('select', ()=>{
+    if(!reticle.visible) return;
+    group.position.setFromMatrixPosition(reticle.matrix);
+    group.quaternion.setFromRotationMatrix(reticle.matrix);
+    group.visible=true; placed=true;
+    toast('Platziert. „Neu platzieren“ zum Umsetzen.');
+    $('#btnRecenter').style.display='inline-block';
+  });
+
+  $('#btnRecenter').addEventListener('click', ()=>{
+    placed=false; group.visible=false; toast('Tippe auf die Ebene, um neu zu platzieren.');
+  });
+
+  renderer.setAnimationLoop((t, frame)=>{
+    if(frame){
+      const results = hitTestSource ? frame.getHitTestResults(hitTestSource) : [];
+      if(results.length){
+        const pose = results[0].getPose(refSpace);
+        reticle.visible = !placed;
+        if(!placed){
+          reticle.matrix.fromArray(pose.transform.matrix);
+          showReticle(true);
+        } else {
+          showReticle(false);
+        }
+      } else {
+        reticle.visible=false; showReticle(false);
+      }
+    }
+    renderer.render(scene, camera);
+  });
+}
+
+async function startImage(){
+  if(!SRC){ toast('Fehlender src-Parameter'); return; }
+  if(!TARGET){ toast('Fehlender target=.mind Parameter'); return; }
+  toast('Scanne das Zielbild…');
+
+  const {MINDAR} = window;
+  const mindarThree = new MINDAR.IMAGE.MindARThree({ container: document.body, imageTargetSrc: TARGET });
+  const {renderer, scene, camera} = mindarThree;
+  scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+
+  const group = await loadWebarAsGroup(SRC);
+  const anchor = mindarThree.addAnchor(0);
+  anchor.group.add(group);
+
+  await mindarThree.start();
+  renderer.setAnimationLoop(()=> renderer.render(scene, camera));
+  $('#modePill').textContent = 'IMAGE TRIGGER';
+  $('#btnRecenter').style.display='none';
+  showReticle(false);
+}
+</script>
+</body>
+</html>
