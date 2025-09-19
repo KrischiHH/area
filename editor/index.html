@@ -1149,11 +1149,12 @@ async function publish(){
   const usdz   = ($('#nativeUsdzUrl')?.value || '').trim();
 
   // >>> deine Modul-Pfade (von /editor/ aus eine Ebene hoch):
-  const baseByMode = {
-    'surface-webxr': '../surface-ar/webxr.html',
-    'native':        '../surfaces-ar/surface-viewer.html',
-    'image':         '../image-ar/viewer.html'
-  };
+  const HOST = 'https://krischihh.github.io/area';
+const baseByMode = {
+  'surface-webxr': `${HOST}/surface-ar/webxr.html`,
+  'native':        `${HOST}/surfaces-ar/surface-viewer.html`,
+  'image':         `${HOST}/image-ar/viewer.html`
+};
 
   let url = `${baseByMode[mode]}?src=${encodeURIComponent(src)}&anchor=${encodeURIComponent(mode)}`;
   if (mode === 'image' && target) {
