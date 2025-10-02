@@ -153,6 +153,15 @@
   const qs = new URLSearchParams(location.search);
   const sceneUrl = qs.get('scene');
 
+  // ID + Worker → direkte GLB-URL bauen
+const workerBase = (qs.get('base') || '').replace(/\/$/, '');
+const sceneId    = qs.get('scene');
+if (workerBase && sceneId && !/^https?:/i.test(sceneUrl||'')) {
+  const GLB = `${workerBase}/scenes/${encodeURIComponent(sceneId)}/scene.glb`;
+  cfg.model.url = GLB;       // sofort setzen; JSON bleibt optional
+}
+
+
   async function maybeLoadSceneFromQuery(){
     if (!sceneUrl) return;
     try{
