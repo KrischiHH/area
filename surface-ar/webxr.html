@@ -27,7 +27,13 @@ let model=null, mixer=null, clips=[];
 const clock = new THREE.Clock();
 
 const qs = new URLSearchParams(location.search);
-const sceneUrl = qs.get('scene');
+const sceneId    = qs.get('scene');
+const workerBase = (qs.get('base') || '').replace(/\/$/, '');
+const HAS_WORKER = !!(sceneId && workerBase);
+
+const SCENE_GLB = HAS_WORKER ? `${workerBase}/scenes/${encodeURIComponent(sceneId)}/scene.glb` : null;
+// Alte Variante: ?scene=<vollständige JSON-URL>
+const sceneUrl = (!HAS_WORKER ? qs.get('scene') : null);
 
 const cfg = {
   modelUrl: 'https://modelviewer.dev/shared-assets/models/Astronaut.glb',
@@ -42,9 +48,15 @@ const rad2deg = r => (r||0) * 180/Math.PI;
 const deg2rad = d => (d||0) * Math.PI/180;
 
 // ---------- Szene aus externer JSON (optional) ----------
+
 async function loadScene(){
-  if (!sceneUrl) return;
-  const r = await fetch(sceneUrl, {cache:'no-cache'}); if(!r.ok) throw new Error('scene.json Load '+r.status);
+  if (SCENE_GLB) {            // neuer, einfacher Weg
+    cfg.modelUrl = SCENE_GLB;
+    return;
+  }
+  if (!sceneUrl) return;       // kein JSON angegeben
+  const r = await fetch(sceneUrl, {cache:'no-cache'});
+  if(!r.ok) throw new Error('scene.json Load '+r.status);
   const j = await r.json();
   if (j?.model?.url) cfg.modelUrl = j.model.url;
   if (Array.isArray(j?.model?.position)) cfg.position = j.model.position;
@@ -53,7 +65,7 @@ async function loadScene(){
   if (j?.model?.animation!=null)         cfg.animation= j.model.animation;
 }
 
-// ---------- Fallback: Query-Parameter (kompatibel zu Editor-URL) ----------
+// -------- Fallback aus Query (Bugfix px!)
 function applyQueryFallback(){
   const glb = qs.get('glb');
   if (glb) cfg.modelUrl = glb;
@@ -64,13 +76,13 @@ function applyQueryFallback(){
     cfg.rotation = [rad2deg(parseFloat(rx)), rad2deg(parseFloat(ry)), rad2deg(parseFloat(rz))].map(v=>isFinite(v)?v:0);
   }
 
-  const px = parseFloat(qs.get('pz')), py = parseFloat(qs.get('py')), pz = parseFloat(qs.get('pz'));
+  // FIX: px kam vorher fälschlich aus 'pz'
+  const px = parseFloat(qs.get('px')), py = parseFloat(qs.get('py')), pz = parseFloat(qs.get('pz'));
   if ([px,py,pz].some(v=>!isNaN(v))) cfg.position = [px||0, py||0, pz||0];
 
   const sx = parseFloat(qs.get('sx')), sy = parseFloat(qs.get('sy')), sz = parseFloat(qs.get('sz'));
   if ([sx,sy,sz].some(v=>!isNaN(v))) cfg.scale = [sx||1, sy||1, sz||1];
 }
-
 // ---------- THREE Init ----------
 function init() {
   scene = new THREE.Scene();
