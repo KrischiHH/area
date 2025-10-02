@@ -37,31 +37,46 @@
   </model-viewer>
 
 <script>
+  // --- NEU: ID & Worker-Basis aus Query
   const qs = new URLSearchParams(location.search);
-  const sceneUrl = qs.get('scene');
+  const sceneId    = qs.get('scene');
+  const workerBase = (qs.get('base') || '').replace(/\/$/, '');
+  const HAS_WORKER = !!(sceneId && workerBase);
+
+  // Ableitungen (funktionieren auch, wenn kein Worker angegeben ist)
+  const SCENE_JSON = HAS_WORKER ? `${workerBase}/scenes/${encodeURIComponent(sceneId)}/scene.json` : (qs.get('scene') || null);
+  const SCENE_GLB  = HAS_WORKER ? `${workerBase}/scenes/${encodeURIComponent(sceneId)}/scene.glb`  : null;
+
   const showErr = m => { const el = document.getElementById('err'); el.textContent = m; el.style.display='block'; };
 
+  // Default-Konfig (fallback)
   let cfg = { model:{ url:"https://modelviewer.dev/shared-assets/models/Astronaut.glb", usdzUrl:null, animation:"*" },
               target:{ previewUrl:null } };
 
   (async ()=>{
-    if (sceneUrl){
+    const mv = document.getElementById('mv');
+
+    // 1) Worker? → direkt GLB benutzen (schnellster Weg)
+    if (SCENE_GLB) {
+      mv.src = SCENE_GLB;
+    }
+    // 2) Optional: eine scene.json laden (alter Stil: scene ist komplette URL)
+    else if (SCENE_JSON) {
       try{
-        const r = await fetch(sceneUrl, {cache:'no-cache'});
+        const r = await fetch(SCENE_JSON, {cache:'no-cache'});
         if(!r.ok) throw new Error(r.status+' '+r.statusText);
         const j = await r.json();
         if (j.model)  cfg.model  = Object.assign(cfg.model,  j.model);
         if (j.target) cfg.target = Object.assign(cfg.target, j.target);
+        mv.src = cfg.model.url || mv.src;
       }catch(e){ showErr('scene.json konnte nicht geladen werden: '+e.message); }
     }
 
-    const mv = document.getElementById('mv');
-    mv.src = cfg.model.url || mv.src;
+    // iOS QuickLook (falls später vorhanden)
     if (cfg.model.usdzUrl) mv.setAttribute('ios-src', cfg.model.usdzUrl); else mv.removeAttribute('ios-src');
     if (cfg.target?.previewUrl) mv.setAttribute('poster', cfg.target.previewUrl);
 
     mv.addEventListener('load', ()=>{
-      // Startansicht
       mv.cameraOrbit = '0deg 70deg auto';
       mv.cameraTarget = 'auto';
       mv.fieldOfView  = '30deg';
@@ -83,6 +98,9 @@
       const idx = Math.max(0, Math.min(names.length-1, parseInt(sel||0,10)));
       if (names[idx]){ mv.animationName = names[idx]; mv.autoplay=true; }
     });
+  })();
+</script>
+
   })();
 </script>
 </body>
