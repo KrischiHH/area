@@ -278,6 +278,10 @@
             <div class="kv"><div>Grid Helligkeit</div><input id="gridIntensity" class="input" type="range" min="0.5" max="1" step="0.05" value="0.95"></div>
             <div class="kv"><div>Grid anzeigen</div><label class="input" style="display:flex;align-items:center;gap:8px;background:transparent;border:none;padding:0"><input id="gridVisible" type="checkbox" checked> <span>Ein</span></label></div>
             <div class="kv"><div>Belichtung</div><input id="exposure" class="input" type="range" min="0.5" max="2" step="0.05" value="1"></div>
+            <div class="kv"><div>Play-Mode</div><select id="playModeSel" class="select"><option value="auto" selected>auto</option><option value="tap">tap</option><option value="button">button</option><option value="ar-placed">ar-placed</option><option value="none">none</option>
+            </select>
+</div>
+
 
             <!-- ===== Anchor-Modus UI ===== -->
             <div class="kv"><div>Anchor-Modus</div>
@@ -414,9 +418,9 @@ async function getGLBBlobFromRec(rec){
 
 function buildSceneJSON({ rec, mode, target, ui }) {
   const g = rec.group, rot = g.rotation;
+
   const sceneJson = {
     meta: { title: (projectName || 'AR-Szene'), mode }, // Worker wählt Entry daraus
-    ...(mode === 'image' ? { target: { mindUrl: target || '', previewUrl: '' } } : {}),
     model: {
       url: "./scene.glb",
       position: [g.position.x, g.position.y, g.position.z],
@@ -427,14 +431,29 @@ function buildSceneJSON({ rec, mode, target, ui }) {
       ],
       scale: [g.scale.x, g.scale.y, g.scale.z],
       animation: ui.animationSel   // "*", "none", Clipname oder Index
-    },
-    target: { previewUrl: "./poster.jpg" } // optional, falls du Poster mit hochlädst
+    }
   };
+
+  // Image-AR: target zusammenführen (nicht überschreiben)
+  if (mode === 'image') {
+    sceneJson.target = {
+      mindUrl: target || '',
+      previewUrl: "./poster.jpg" // optional
+    };
+  }
+
+  // Native-Viewer: externe Assets mitgeben (falls eingetragen)
+  if (mode === 'native') {
+    const glb = ($('#nativeGlbUrl')?.value || '').trim();
+    const usdz = ($('#nativeUsdzUrl')?.value || '').trim();
+    sceneJson.native = { glbUrl: glb, usdzUrl: usdz };
+  }
 
   if (ui.playMode) sceneJson.play = ui.playMode; // Native viewer play-mode
 
   return sceneJson;
 }
+
 
 async function publishToWorker({ workerBase, sceneId, sceneJson, glbBlob, publishKey }) {
   const fd = new FormData();
@@ -1227,32 +1246,43 @@ async function publishToWorker({ workerBase, sceneId, sceneJson, glbBlob, publis
 
     // Öffnet die Modul-Seiten (Pfade relativ zu /editor/)
     async function publish(){
-  // 1) Modus/Quelle aus deiner UI
-  const modeSel = $('#anchorMode')?.value || 'surface-webxr';      // "surface-webxr" | "native" | "image"
+  // 1) Modus & ggf. Image-Target
+  const modeSel = $('#anchorMode')?.value || 'surface-webxr';
   const mindUrl = ($('#imageTargetUrl')?.value || '').trim();
 
-  // 3D-Objekt wählen (wie bisher)
-  const rec = (state.selection.size===1 ? findRec(state.selectedId)
-                                        : state.objects.find(o=>!o.media)) || null;
-  if (!rec){ toast('Kein 3D-Objekt in der Szene.'); return; }
+  // 2) 3D-Objekt wählen (kein Media, keine nackte Group)
+  const cand = (state.selection.size === 1
+    ? findRec(state.selectedId)
+    : state.objects.find(o => o.type === 'object' && !o.media)) || null;
 
-  // 2) Animations- & Play-Parameter aus UI
-  let animValue = "*";
+  const rec = pick3DRec(cand);
+  if (!rec) { toast('Kein 3D-Objekt (GLB) gefunden. Bitte ein Objekt auswählen.'); return; }
+
+  // 3) GLTF blocken (Viewer erwartet GLB)
+  if (isGLTFSource(rec)) {
+    toast('Publizieren erwartet GLB. Bitte als .glb importieren oder vorher konvertieren.');
+    return;
+  }
+
+  // 4) Animation & Play-Mode aus UI
+  let animValue = "none";
   if (rec.clips?.length) {
     const idx = parseInt($('#animClip').value || '0', 10) || 0;
-    // Clip-Namen mitgeben (fällt auf Index zurück)
-    animValue = rec.clips[idx]?.name || idx;
-  } else {
-    animValue = "none";
+    animValue = rec.clips[idx]?.name || idx; // Clipname bevorzugen
   }
-  const playMode = 'auto'; // "auto" | "tap" | "button" | "ar-placed" | "none"
+  const playMode = $('#playModeSel')?.value || 'auto';
 
-  // 3) GLB beschaffen
+  // 5) GLB beschaffen
   let glbBlob;
-  try { glbBlob = await getGLBBlobFromRec(rec); }
-  catch(e){ console.error(e); toast('GLB nicht gefunden/lesbar'); return; }
+  try {
+    glbBlob = await getGLBBlobFromRec(rec);
+  } catch(e) {
+    console.error(e);
+    toast('GLB nicht gefunden/lesbar');
+    return;
+  }
 
-  // 4) scene.json bauen
+  // 6) scene.json bauen
   const sceneJson = buildSceneJSON({
     rec,
     mode: modeSel,
@@ -1260,12 +1290,10 @@ async function publishToWorker({ workerBase, sceneId, sceneJson, glbBlob, publis
     ui: { animationSel: animValue, playMode }
   });
 
-  // 5) Scene-ID aus Projektname
+  // 7) Scene-ID aus Projektname
   const sceneId = sanitizeSceneId(projectName || 'scene');
-      // alt: /[^a-z0-9-_]+/g
 
-
-  // 6) Publish -> Worker (R2)
+  // 8) Publish -> Worker (R2)
   let result;
   try{
     result = await publishToWorker({
@@ -1281,18 +1309,40 @@ async function publishToWorker({ workerBase, sceneId, sceneJson, glbBlob, publis
     return;
   }
 
-  // 7) Links anzeigen/öffnen
+  // 9) Viewer-Link öffnen/teilen
   const webxr = `${VIEWER_BASE}/webxr.html?scene=${encodeURIComponent(sceneId)}&base=${encodeURIComponent(WORKER_BASE)}`;
   const native = `${VIEWER_BASE}/native/index.html?scene=${encodeURIComponent(sceneId)}&base=${encodeURIComponent(WORKER_BASE)}`;
   const imageV = `${VIEWER_BASE}/image-ar/viewer.html?scene=${encodeURIComponent(sceneId)}&base=${encodeURIComponent(WORKER_BASE)}`;
-
   const urlByMode = (modeSel==='native') ? native : (modeSel==='image' ? imageV : webxr);
-  window.open(urlByMode, '_blank');
 
+  window.open(urlByMode, '_blank');
   try{ await navigator.clipboard.writeText(urlByMode); }catch{}
   toast('Veröffentlicht ✓  Link kopiert:\n' + urlByMode);
 }
 
+
+
+    function pick3DRec(rec) {
+  if (!rec) return null;
+  if (rec.type === 'object' && !rec.media) return rec;
+  if (rec.type === 'group' && rec.children) {
+    return rec.children.find(c => c.type === 'object' && !c.media) || null;
+  }
+  return null;
+}
+if (rec.file && /\.gltf$/i.test(rec.file.name)) {
+  toast('Publizieren erwartet GLB. Bitte als .glb importieren oder vorher konvertieren.');
+  return;
+}
+
+    // Erkennt .gltf (Datei, URL oder Data-URL)
+function isGLTFSource(rec){
+  const name = rec.file?.name || '';
+  const url  = rec.url || '';
+  return /\.gltf$/i.test(name)
+      || /\.gltf(\?|$)/i.test(url)
+      || /^data:.*(gltf\+json|application\/json)/i.test(url);
+}
 
     // Projektmenü & Aktionen
     (function(){
