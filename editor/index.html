@@ -1038,8 +1038,7 @@ async function publishToWorker({ workerBase, sceneId, sceneJson, glbBlob, publis
       async function pushRec(rec){
         if(rec.type==='group' && rec.children){ for(const c of rec.children) await pushRec(c); return; }
         const g=rec.group; g.updateMatrixWorld(true);
-        const pos=new THREE.Vector3(), quat=new THREE.Qua
-        ternion(), scl=new THREE.Vector3();
+        const pos=new THREE.Vector3(), quat=new THREE.Quaternion(), scl=new THREE.Vector3();
         g.matrixWorld.decompose(pos,quat,scl);
         const eul=new THREE.Euler().setFromQuaternion(quat,'XYZ');
 
@@ -1259,6 +1258,8 @@ async function publishToWorker({ workerBase, sceneId, sceneJson, glbBlob, publis
 
   // 5) Scene-ID aus Projektname
   const sceneId = sanitizeSceneId(projectName || 'scene');
+      // alt: /[^a-z0-9-_]+/g
+return (id || 'scene').toLowerCase().replace(/[^a-z0-9_-]+/g,'-').slice(0,64) || 'scene';
 
   // 6) Publish -> Worker (R2)
   let result;
@@ -1382,6 +1383,23 @@ async function publishToWorker({ workerBase, sceneId, sceneJson, glbBlob, publis
       else if(/^[1-5]$/.test(k)){
         const i=parseInt(k,10)-1;
         if(e.shiftKey) saveBookmark(i); else recallBookmark(i);
+
+        const cors = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, X-AREA-Key'
+};
+
+export default {
+  async fetch(req, env) {
+    if (req.method === 'OPTIONS') {
+      return new Response(null, { headers: cors });
+    }
+    // … bei GET/POST die gleichen CORS-Header mitschicken:
+    const res = await handleRoute(req, env);
+    return new Response(res.body, { ...res, headers: { ...(res.headers||{}), ...cors }});
+  }
+}
       }
     });
 
