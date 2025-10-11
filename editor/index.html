@@ -392,8 +392,12 @@ const VIEWER_BASE = 'https://area-viewer.pages.dev';
 const PUBLISH_KEY = '131ewefsdfs34534tfvsfdgsdgsdgvsd'; // optional; nur setzen, wenn du im Worker ein Secret nutzt
 
 function sanitizeSceneId(id) {
-  return (id || 'scene').toLowerCase().replace(/[^a-z0-9-_]+/g,'-').slice(0,64) || 'scene';
+  return (id || 'scene')
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')  // <— korrigierte Regex
+    .slice(0, 64) || 'scene';
 }
+
 
 async function getGLBBlobFromRec(rec){
   if (rec?.file) {
@@ -1259,7 +1263,7 @@ async function publishToWorker({ workerBase, sceneId, sceneJson, glbBlob, publis
   // 5) Scene-ID aus Projektname
   const sceneId = sanitizeSceneId(projectName || 'scene');
       // alt: /[^a-z0-9-_]+/g
-return (id || 'scene').toLowerCase().replace(/[^a-z0-9_-]+/g,'-').slice(0,64) || 'scene';
+
 
   // 6) Publish -> Worker (R2)
   let result;
@@ -1384,22 +1388,6 @@ return (id || 'scene').toLowerCase().replace(/[^a-z0-9_-]+/g,'-').slice(0,64) ||
         const i=parseInt(k,10)-1;
         if(e.shiftKey) saveBookmark(i); else recallBookmark(i);
 
-        const cors = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, X-AREA-Key'
-};
-
-export default {
-  async fetch(req, env) {
-    if (req.method === 'OPTIONS') {
-      return new Response(null, { headers: cors });
-    }
-    // … bei GET/POST die gleichen CORS-Header mitschicken:
-    const res = await handleRoute(req, env);
-    return new Response(res.body, { ...res, headers: { ...(res.headers||{}), ...cors }});
-  }
-}
       }
     });
 
