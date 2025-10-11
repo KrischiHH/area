@@ -1289,28 +1289,6 @@ async function publishToWorker({ workerBase, sceneId, sceneJson, glbBlob, publis
 }
 
 
-      const payload = {
-        type: 'webar-load',
-        mode,
-        target: mode==='image' ? target : null,
-        transform: {
-          px: rec.group.position.x, py: rec.group.position.y, pz: rec.group.position.z,
-          rx: rec.group.rotation.x, ry: rec.group.rotation.y, rz: rec.group.rotation.z,
-          sx: rec.group.scale.x,    sy: rec.group.scale.y,    sz: rec.group.scale.z
-        },
-        glbBuffer
-      };
-
-      function onReady(e){
-        if (e.origin !== 'https://krischihh.github.io') return;
-        if (e.data && e.data.type === 'webar-ready') {
-          window.removeEventListener('message', onReady);
-          viewer.postMessage(payload, 'https://krischihh.github.io', [glbBuffer]);
-        }
-      }
-      window.addEventListener('message', onReady);
-    }
-
     // Projektmenü & Aktionen
     (function(){
       const menu = $('#projectMenu');
