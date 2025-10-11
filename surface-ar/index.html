@@ -64,10 +64,20 @@
   (async ()=>{
     const mv = document.getElementById('mv');
 
-    // 1) Direkter GLB aus Worker?
-    if (SCENE_GLB) {
-      mv.src = SCENE_GLB;
+   if (SCENE_GLB) {
+  mv.src = SCENE_GLB;
+  // Szene-JSON zusätzlich einlesen (Animation/Poster/USdz/Play)
+  try{
+    const r = await fetch(`${workerBase}/scenes/${encodeURIComponent(sceneId)}/scene.json`, {cache:'no-cache'});
+    if (r.ok){
+      const j = await r.json();
+      if (j.model)  cfg.model  = Object.assign(cfg.model,  j.model);
+      if (j.target) cfg.target = Object.assign(cfg.target, j.target);
+      if (j.play)   cfg.play   = j.play;
     }
+  }catch(e){ /* optional */ }
+}
+
     // 2) Szene per JSON laden (alter Stil: ?scene=<volle URL>)
     else if (SCENE_JSON) {
       try{
