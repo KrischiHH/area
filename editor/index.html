@@ -386,6 +386,67 @@
     import { OutlinePass }    from 'three/addons/postprocessing/OutlinePass.js';
     import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
+    // === AREA Publish Config ===
+const WORKER_BASE = 'https://area-publish.area-webar.workers.dev'; // ggf. eigene Domain
+const VIEWER_BASE = 'https://area-viewer.pages.dev';
+const PUBLISH_KEY = ''; // optional; nur setzen, wenn du im Worker ein Secret nutzt
+
+function sanitizeSceneId(id) {
+  return (id || 'scene').toLowerCase().replace(/[^a-z0-9-_]+/g,'-').slice(0,64) || 'scene';
+}
+
+async function getGLBBlobFromRec(rec){
+  if (rec?.file) {
+    const ab = await rec.file.arrayBuffer();
+    return new Blob([ab], { type: 'model/gltf-binary' });
+  }
+  if (rec?.url) {
+    const r = await fetch(rec.url);
+    const b = await r.blob();
+    return new Blob([await b.arrayBuffer()], { type:'model/gltf-binary' });
+  }
+  throw new Error('Kein GLB am Objekt gefunden.');
+}
+
+function buildSceneJSON({ rec, mode, target, ui }) {
+  const g = rec.group, rot = g.rotation;
+  const sceneJson = {
+    meta: { title: (projectName || 'AR-Szene'), mode }, // Worker wählt Entry daraus
+    ...(mode === 'image' ? { target: { mindUrl: target || '', previewUrl: '' } } : {}),
+    model: {
+      url: "./scene.glb",
+      position: [g.position.x, g.position.y, g.position.z],
+      rotation: [
+        THREE.MathUtils.radToDeg(rot.x),
+        THREE.MathUtils.radToDeg(rot.y),
+        THREE.MathUtils.radToDeg(rot.z)
+      ],
+      scale: [g.scale.x, g.scale.y, g.scale.z],
+      animation: ui.animationSel   // "*", "none", Clipname oder Index
+    },
+    target: { previewUrl: "./poster.jpg" } // optional, falls du Poster mit hochlädst
+  };
+
+  if (ui.playMode) sceneJson.play = ui.playMode; // Native viewer play-mode
+
+  return sceneJson;
+}
+
+async function publishToWorker({ workerBase, sceneId, sceneJson, glbBlob, publishKey }) {
+  const fd = new FormData();
+  fd.append('sceneId', sceneId);
+  fd.append('file', new Blob([JSON.stringify(sceneJson)], {type:'application/json'}), 'scene.json');
+  fd.append('file', glbBlob, 'scene.glb');
+  // Optional künftig: fd.append('file', usdzBlob, 'scene.usdz'); fd.append('file', posterBlob, 'poster.jpg');
+
+  const headers = publishKey ? { 'X-AREA-Key': publishKey } : {};
+  const res = await fetch(`${workerBase}/publish`, { method:'POST', headers, body: fd });
+  const txt = await res.text();
+  if (!res.ok) throw new Error(`Publish failed (${res.status}): ${txt}`);
+  try { return JSON.parse(txt); } catch { return { ok:true, viewerUrl:txt }; }
+}
+
+
     const $ = s=>document.querySelector(s);
     const toastEl = $('#toast');
     function toast(m){ toastEl.textContent=m; toastEl.style.display='block'; setTimeout(()=>toastEl.style.display='none',1800); }
@@ -1163,41 +1224,70 @@
 
     // Öffnet die Modul-Seiten (Pfade relativ zu /editor/)
     async function publish(){
-      const HOST = 'https://krischihh.github.io/area';
+  // 1) Modus/Quelle aus deiner UI
+  const modeSel = $('#anchorMode')?.value || 'surface-webxr';      // "surface-webxr" | "native" | "image"
+  const mindUrl = ($('#imageTargetUrl')?.value || '').trim();
 
-      const baseByMode = {
-        'surface-webxr': `${HOST}/surface-ar/webxr.html`,
-        'native':        `${HOST}/surface-ar/index.html`,
-        'image':         `${HOST}/image-ar/viewer.html`
-      };
+  // 3D-Objekt wählen (wie bisher)
+  const rec = (state.selection.size===1 ? findRec(state.selectedId)
+                                        : state.objects.find(o=>!o.media)) || null;
+  if (!rec){ toast('Kein 3D-Objekt in der Szene.'); return; }
 
-      const mode   = $('#anchorMode')?.value || 'surface-webxr';
-      const target = ($('#imageTargetUrl')?.value || '').trim();
+  // 2) Animations- & Play-Parameter aus UI
+  let animValue = "*";
+  if (rec.clips?.length) {
+    const idx = parseInt($('#animClip').value || '0', 10) || 0;
+    // Clip-Namen mitgeben (fällt auf Index zurück)
+    animValue = rec.clips[idx]?.name || idx;
+  } else {
+    animValue = "none";
+  }
+  const playMode = 'auto'; // "auto" | "tap" | "button" | "ar-placed" | "none"
 
-      const rec = (state.selection.size===1 ? findRec(state.selectedId)
-                                            : state.objects.find(o=>!o.media)) || null;
-      if (!rec){ toast('Kein 3D-Objekt in der Szene.'); return; }
+  // 3) GLB beschaffen
+  let glbBlob;
+  try { glbBlob = await getGLBBlobFromRec(rec); }
+  catch(e){ console.error(e); toast('GLB nicht gefunden/lesbar'); return; }
 
-      await exportSceneJSONForShare({ mode, target, rec, HOST });
+  // 4) scene.json bauen
+  const sceneJson = buildSceneJSON({
+    rec,
+    mode: modeSel,
+    target: mindUrl,
+    ui: { animationSel: animValue, playMode }
+  });
 
-      const viewer = window.open(baseByMode[mode], '_blank');
-      if (!viewer){ toast('Popup blockiert? Bitte Popups erlauben.'); return; }
+  // 5) Scene-ID aus Projektname
+  const sceneId = sanitizeSceneId(projectName || 'scene');
 
-      let glbBuffer = null;
-      try{
-        if (rec.file) {
-          glbBuffer = await rec.file.arrayBuffer();
-        } else if (rec.url) {
-          const res = await fetch(rec.url);
-          glbBuffer = await res.arrayBuffer();
-        } else {
-          toast('Keine Modellquelle gefunden.'); 
-          return;
-        }
-      } catch(e){
-        console.error(e); toast('Modell konnte nicht geladen werden.');
-        return;
-      }
+  // 6) Publish -> Worker (R2)
+  let result;
+  try{
+    result = await publishToWorker({
+      workerBase: WORKER_BASE,
+      sceneId,
+      sceneJson,
+      glbBlob,
+      publishKey: PUBLISH_KEY
+    });
+  }catch(err){
+    console.error(err);
+    toast(err.message || 'Publish fehlgeschlagen');
+    return;
+  }
+
+  // 7) Links anzeigen/öffnen
+  const webxr = `${VIEWER_BASE}/webxr.html?scene=${encodeURIComponent(sceneId)}&base=${encodeURIComponent(WORKER_BASE)}`;
+  const native = `${VIEWER_BASE}/native/index.html?scene=${encodeURIComponent(sceneId)}&base=${encodeURIComponent(WORKER_BASE)}`;
+  const imageV = `${VIEWER_BASE}/image-ar/viewer.html?scene=${encodeURIComponent(sceneId)}&base=${encodeURIComponent(WORKER_BASE)}`;
+
+  const urlByMode = (modeSel==='native') ? native : (modeSel==='image' ? imageV : webxr);
+  window.open(urlByMode, '_blank');
+
+  try{ await navigator.clipboard.writeText(urlByMode); }catch{}
+  toast('Veröffentlicht ✓  Link kopiert:\n' + urlByMode);
+}
+
 
       const payload = {
         type: 'webar-load',
