@@ -50,11 +50,26 @@ const deg2rad = d => (d||0) * Math.PI/180;
 // ---------- Szene aus externer JSON (optional) ----------
 
 async function loadScene(){
-  if (SCENE_GLB) {            // neuer, einfacher Weg
+  if (HAS_WORKER) {
+    // 1) GLB direkt setzen
     cfg.modelUrl = SCENE_GLB;
+    // 2) Zusätzlich scene.json mergen (animation/transform optional)
+    try{
+      const u = `${workerBase}/scenes/${encodeURIComponent(sceneId)}/scene.json`;
+      const r = await fetch(u, {cache:'no-cache'});
+      if (r.ok){
+        const j = await r.json();
+        if (j?.model?.animation != null) cfg.animation = j.model.animation;
+        if (Array.isArray(j?.model?.scale))    cfg.scale = j.model.scale;
+        if (Array.isArray(j?.model?.rotation)) cfg.rotation = j.model.rotation; // Grad!
+        if (Array.isArray(j?.model?.position)) cfg.position = j.model.position; // (nur initial)
+      }
+    }catch(e){ /* optional */ }
     return;
   }
-  if (!sceneUrl) return;       // kein JSON angegeben
+
+  // Alte Variante: ?scene=<vollständige JSON-URL>
+  if (!sceneUrl) return;
   const r = await fetch(sceneUrl, {cache:'no-cache'});
   if(!r.ok) throw new Error('scene.json Load '+r.status);
   const j = await r.json();
@@ -64,6 +79,7 @@ async function loadScene(){
   if (Array.isArray(j?.model?.scale))    cfg.scale    = j.model.scale;
   if (j?.model?.animation!=null)         cfg.animation= j.model.animation;
 }
+
 
 // -------- Fallback aus Query (Bugfix px!)
 function applyQueryFallback(){
