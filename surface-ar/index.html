@@ -36,31 +36,39 @@
     <button slot="ar-button">In AR öffnen</button>
   </model-viewer>
 
+  <button id="playBtn" style="position:absolute;right:max(12px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));padding:.75rem 1rem;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:#111;color:#fff;display:none">Play</button>
+<button id="pauseBtn" style="position:absolute;right:max(12px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));padding:.75rem 1rem;border-radius:12px;border:1px solid rgba(255,255,255,.25);background:#111;color:#fff;display:none">Pause</button>
+
 <script>
-  // --- NEU: ID & Worker-Basis aus Query
+  // --- Query-Parameter / Worker
   const qs = new URLSearchParams(location.search);
   const sceneId    = qs.get('scene');
   const workerBase = (qs.get('base') || '').replace(/\/$/, '');
   const HAS_WORKER = !!(sceneId && workerBase);
 
-  // Ableitungen (funktionieren auch, wenn kein Worker angegeben ist)
-  const SCENE_JSON = HAS_WORKER ? `${workerBase}/scenes/${encodeURIComponent(sceneId)}/scene.json` : (qs.get('scene') || null);
+  // Ableitungen
+  const SCENE_JSON = HAS_WORKER ? `${workerBase}/scenes/${encodeURIComponent(sceneId)}/scene.json`
+                                : (qs.get('scene') || null);
   const SCENE_GLB  = HAS_WORKER ? `${workerBase}/scenes/${encodeURIComponent(sceneId)}/scene.glb`  : null;
 
   const showErr = m => { const el = document.getElementById('err'); el.textContent = m; el.style.display='block'; };
 
-  // Default-Konfig (fallback)
-  let cfg = { model:{ url:"https://modelviewer.dev/shared-assets/models/Astronaut.glb", usdzUrl:null, animation:"*" },
-              target:{ previewUrl:null } };
+  // Fallback-Konfig + gewünschter Play-Mode
+  // playMode: 'auto' | 'tap' | 'button' | 'ar-placed' | 'none'
+  let cfg = {
+    model:  { url:"https://modelviewer.dev/shared-assets/models/Astronaut.glb", usdzUrl:null, animation:"*" },
+    target: { previewUrl:null },
+    play: (qs.get('play') || 'auto') // per URL überschreibbar: ?play=auto|tap|button|ar-placed|none
+  };
 
   (async ()=>{
     const mv = document.getElementById('mv');
 
-    // 1) Worker? → direkt GLB benutzen (schnellster Weg)
+    // 1) Direkter GLB aus Worker?
     if (SCENE_GLB) {
       mv.src = SCENE_GLB;
     }
-    // 2) Optional: eine scene.json laden (alter Stil: scene ist komplette URL)
+    // 2) Szene per JSON laden (alter Stil: ?scene=<volle URL>)
     else if (SCENE_JSON) {
       try{
         const r = await fetch(SCENE_JSON, {cache:'no-cache'});
@@ -68,40 +76,82 @@
         const j = await r.json();
         if (j.model)  cfg.model  = Object.assign(cfg.model,  j.model);
         if (j.target) cfg.target = Object.assign(cfg.target, j.target);
+        if (j.play)   cfg.play   = j.play; // optionaler Schalter aus scene.json
         mv.src = cfg.model.url || mv.src;
       }catch(e){ showErr('scene.json konnte nicht geladen werden: '+e.message); }
     }
 
-    // iOS QuickLook (falls später vorhanden)
+    // iOS QuickLook
     if (cfg.model.usdzUrl) mv.setAttribute('ios-src', cfg.model.usdzUrl); else mv.removeAttribute('ios-src');
     if (cfg.target?.previewUrl) mv.setAttribute('poster', cfg.target.previewUrl);
 
+    // Hilfsfunktionen
+    function pickAnimation(){
+      const names = mv.availableAnimations || [];
+      const sel = cfg.model.animation;
+      if (sel === 'none'){ mv.animationName = null; return; }
+      if (sel === '*' || sel == null){
+        mv.animationName = names[0] || null; return;
+      }
+      if (typeof sel === 'string'){
+        mv.animationName = names.includes(sel) ? sel : (names[0] || null); return;
+      }
+      const idx = Math.max(0, Math.min(names.length-1, parseInt(sel||0,10)));
+      mv.animationName = names[idx] || null;
+    }
+
+    function showPlayUI(show){
+      const playBtn  = document.getElementById('playBtn');
+      const pauseBtn = document.getElementById('pauseBtn');
+      if (!playBtn || !pauseBtn) return;
+      playBtn.style.display  = show ? 'block' : 'none';
+      pauseBtn.style.display = show ? 'block' : 'none';
+
+      playBtn.onclick  = ()=>{ mv.play();  playBtn.style.display='none'; pauseBtn.style.display='block'; };
+      pauseBtn.onclick = ()=>{ mv.pause(); pauseBtn.style.display='none'; playBtn.style.display='block'; };
+    }
+
+    // Hauptlogik
     mv.addEventListener('load', ()=>{
-      mv.cameraOrbit = '0deg 70deg auto';
+      // Kamera zurücksetzen (optional)
+      mv.cameraOrbit  = '0deg 70deg auto';
       mv.cameraTarget = 'auto';
       mv.fieldOfView  = '30deg';
       mv.jumpCameraToGoal();
 
       // Animation wählen
-      const names = mv.availableAnimations || [];
-      const sel = cfg.model.animation;
-      if (sel === 'none'){ mv.autoplay=false; mv.animationName=null; return; }
-      if (sel === '*' || sel==null){
-        if (names.length){ mv.animationName = names[0]; mv.autoplay=true; }
-        return;
+      pickAnimation();
+
+      // Start- / Trigger-Logik
+      const mode = String(cfg.play || 'auto').toLowerCase();
+
+      // immer erst pausiert beginnen – wir steuern selbst
+      mv.pause();
+
+      if (mode === 'auto'){
+        // sofort abspielen
+        if (mv.animationName) mv.play(); // entspricht dem Autoplay-Attribut :contentReference[oaicite:2]{index=2}
       }
-      if (typeof sel === 'string'){
-        if (names.includes(sel)){ mv.animationName = sel; mv.autoplay=true; }
-        else if (names.length){ mv.animationName = names[0]; mv.autoplay=true; }
-        return;
+      else if (mode === 'tap'){
+        // bei Tap/Klick auf das Canvas umschalten
+        const toggle = ()=> mv.paused ? mv.play() : mv.pause();
+        mv.addEventListener('click', toggle);
       }
-      const idx = Math.max(0, Math.min(names.length-1, parseInt(sel||0,10)));
-      if (names[idx]){ mv.animationName = names[idx]; mv.autoplay=true; }
+      else if (mode === 'button'){
+        // UI-Buttons sichtbar machen
+        showPlayUI(true);
+      }
+      else if (mode === 'ar-placed'){
+        // Nur im WebXR-AR verfügbar: nach Platzierung starten
+        mv.addEventListener('ar-status', (ev)=>{
+          if (ev.detail?.status === 'object-placed' && mv.animationName) mv.play();
+        }); // Statuswerte: not-presenting | session-started | object-placed | failed :contentReference[oaicite:3]{index=3}
+        // Hinweis: In Scene Viewer / Quick Look ist diese Steuerung nicht möglich. :contentReference[oaicite:4]{index=4}
+      }
+      // 'none' → nichts tun
     });
   })();
 </script>
 
-  })();
-</script>
 </body>
 </html>
