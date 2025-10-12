@@ -389,6 +389,7 @@
     import { RenderPass }     from 'three/addons/postprocessing/RenderPass.js';
     import { OutlinePass }    from 'three/addons/postprocessing/OutlinePass.js';
     import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+    import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 
     // === AREA Publish Config ===
 const WORKER_BASE = 'https://area-publish.area-webar.workers.dev'; // ggf. eigene Domain
@@ -403,18 +404,52 @@ function sanitizeSceneId(id) {
 }
 
 
+// Erkennt .glb direkt (Datei/URL)
+function isGLBSource(rec){
+  const name = rec.file?.name || '';
+  const url  = rec.url || '';
+  return /\.glb$/i.test(name) || /\.glb(\?|$)/i.test(url);
+}
+
+// Exportiert das geladene Objekt (rec.root bevorzugt) als GLB (inkl. Animationen)
+async function exportRecToGLB(rec){
+  return new Promise((resolve, reject)=>{
+    try{
+      const exporter = new GLTFExporter();
+      const node = rec.root || rec.group; // root enthält die eigentliche GLTF-Szene
+      const options = {
+        binary: true,
+        animations: Array.isArray(rec.clips) ? rec.clips : [],
+        // optional:
+        includeCustomExtensions: true,
+        // forceIndices: true,              // falls gewünscht
+        // forcePowerOfTwoTextures: false,  // falls gewünscht
+      };
+      exporter.parse(node, (result)=>{
+        // result ist ein ArrayBuffer (binary:true)
+        resolve(new Blob([result], { type: 'model/gltf-binary' }));
+      }, options);
+    }catch(err){ reject(err); }
+  });
+}
+
+// Liefert immer einen GLB-Blob – bei .gltf wird "on-the-fly" konvertiert.
 async function getGLBBlobFromRec(rec){
-  if (rec?.file) {
+  // 1) Bereits GLB? -> unverändert übernehmen
+  if (isGLBSource(rec) && rec?.file) {
     const ab = await rec.file.arrayBuffer();
     return new Blob([ab], { type: 'model/gltf-binary' });
   }
-  if (rec?.url) {
+  if (isGLBSource(rec) && rec?.url) {
     const r = await fetch(rec.url);
     const b = await r.blob();
     return new Blob([await b.arrayBuffer()], { type:'model/gltf-binary' });
   }
-  throw new Error('Kein GLB am Objekt gefunden.');
+
+  // 2) Nicht-GLB (z.B. .gltf)? -> aus der bereits geladenen Scene exportieren
+  return await exportRecToGLB(rec);
 }
+
 
 function buildSceneJSON({ rec, mode, target, ui }) {
   const g = rec.group, rot = g.rotation;
@@ -1258,12 +1293,7 @@ async function publishToWorker({ workerBase, sceneId, sceneJson, glbBlob, publis
   const rec = pick3DRec(cand);
   if (!rec) { toast('Kein 3D-Objekt (GLB) gefunden. Bitte ein Objekt auswählen.'); return; }
 
-  // 3) GLTF blocken (Viewer erwartet GLB)
-  if (isGLTFSource(rec)) {
-    toast('Publizieren erwartet GLB. Bitte als .glb importieren oder vorher konvertieren.');
-    return;
-  }
-
+   
   // 4) Animation & Play-Mode aus UI
   let animValue = "none";
   if (rec.clips?.length) {
@@ -1292,6 +1322,24 @@ async function publishToWorker({ workerBase, sceneId, sceneJson, glbBlob, publis
 
   // 7) Scene-ID aus Projektname
   const sceneId = sanitizeSceneId(projectName || 'scene');
+
+          function pick3DRec(rec) {
+  if (!rec) return null;
+  if (rec.type === 'object' && !rec.media) return rec;
+  if (rec.type === 'group' && rec.children) {
+    return rec.children.find(c => c.type === 'object' && !c.media) || null;
+  }
+  return null;
+}
+
+    // Erkennt .gltf (Datei, URL oder Data-URL)
+function isGLTFSource(rec){
+  const name = rec.file?.name || '';
+  const url  = rec.url || '';
+  return /\.gltf$/i.test(name)
+      || /\.gltf(\?|$)/i.test(url)
+      || /^data:.*(gltf\+json|application\/json)/i.test(url);
+}
 
   // 8) Publish -> Worker (R2)
   let result;
@@ -1322,23 +1370,7 @@ async function publishToWorker({ workerBase, sceneId, sceneJson, glbBlob, publis
 
 
 
-    function pick3DRec(rec) {
-  if (!rec) return null;
-  if (rec.type === 'object' && !rec.media) return rec;
-  if (rec.type === 'group' && rec.children) {
-    return rec.children.find(c => c.type === 'object' && !c.media) || null;
-  }
-  return null;
-}
 
-    // Erkennt .gltf (Datei, URL oder Data-URL)
-function isGLTFSource(rec){
-  const name = rec.file?.name || '';
-  const url  = rec.url || '';
-  return /\.gltf$/i.test(name)
-      || /\.gltf(\?|$)/i.test(url)
-      || /^data:.*(gltf\+json|application\/json)/i.test(url);
-}
 
     // Projektmenü & Aktionen
     (function(){
