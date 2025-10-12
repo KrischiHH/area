@@ -5,10 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>WebAR Editor v2.2.4</title>
   <style>
-    :root{
-      --bg:#0e1116;--panel:#111828;--panel2:#192339;--text:#e9ecf5;--muted:#9fb3d9;--border:#24314a;--accent:#60a5fa;--accent2:#93c5fd;
-      color-scheme: dark;
-    }
+    :root.theme-aurora{
+  --bg:#0a0f18;
+  --panel:#0e1624;
+  --panel2:#132036;
+  --text:#eaf2ff;
+  --muted:#a1b7da;
+  --border:#24314a;
+  --accent:#7dd3fc;   /* Cyan */
+  --accent2:#a5f3fc;  /* Hell-Cyan */
+}
     /* Eingestanzte Pill (reine Vertiefung) */
     .top .brand-pill{
       --pill-h: 36px;
@@ -92,6 +98,28 @@
     .select option{background:#0f1420;color:var(--text)}
     .kv{display:grid;grid-template-columns:150px 1fr;gap:8px;align-items:center;margin-bottom:8px}
 
+    /* Fokus sichtbar & konsistent */
+:where(.btn,.toolbtn,.menubtn,.menuitem,.input,.select):focus-visible{
+  outline:2px solid var(--accent);
+  outline-offset:2px;
+}
+
+/* Dezente Glass-Optik für Overlays */
+.hint,.status-badge{
+  background:#0b1220cc;
+  backdrop-filter: blur(8px);
+}
+
+/* Panels minimal „schweben“ lassen */
+.panel{ box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+
+/* Scrollbars dezent */
+*{ scrollbar-width:thin; scrollbar-color: var(--border) transparent; }
+.content::-webkit-scrollbar{ width:10px; height:10px; }
+.content::-webkit-scrollbar-thumb{ background:var(--border); border-radius:10px; }
+.content::-webkit-scrollbar-track{ background:transparent; }
+
+
     /* Icons (Masken) – zentral definiert */
     :root{
       --ico-transform:     url("https://raw.githubusercontent.com/KrischiHH/area/refs/heads/main/icons/transform_icon.svg");
@@ -164,6 +192,7 @@
         <label class="menuitem" role="menuitem">Projekt öffnen <input id="file-project" type="file" accept=".webar,.json"></label>
         <button id="btn-save" class="menuitem" role="menuitem">Speichern</button>
         <button id="btn-save-as" class="menuitem" role="menuitem">Speichern unter…</button>
+        <button id="btn-export-glb" class="menuitem" role="menuitem">Als GLB exportieren…</button>
         <button id="btn-publish" class="menuitem" role="menuitem">Veröffentlichen / Vorschau…</button>
       </div>
     </div>
@@ -1448,6 +1477,53 @@ try {
   toast('Veröffentlicht ✓  Link kopiert:\n' + urlByMode);
 }
 
+async function exportSelectedGLB(){
+  // 1) Kandidaten bestimmen: aktive Auswahl oder erstes 3D-Objekt ohne Media
+  const cand = (state.selection.size === 1
+    ? findRec(state.selectedId)
+    : state.objects.find(o => o.type === 'object' && !o.media)) || null;
+
+  // Gruppen -> erstes 3D-Kind ohne Media nehmen
+  let rec = cand;
+  if (rec?.type === 'group' && rec.children) {
+    rec = rec.children.find(c => c.type === 'object' && !c.media) || null;
+  }
+  if (!rec || rec.media) { toast('Kein 3D-Objekt zum Exportieren ausgewählt.'); return; }
+
+  // 2) GLB erzeugen
+  toast('Exportiere GLB…');
+  let glbBlob;
+  try {
+    glbBlob = await getGLBBlobFromRec(rec);
+  } catch (e) {
+    console.error(e);
+    toast('Export fehlgeschlagen: ' + (e?.message || ''));
+    return;
+  }
+
+  // 3) Dateiname
+  const baseName = sanitizeSceneId((projectName || 'scene') + '-' + (rec.name || 'model')).slice(0, 64);
+  const fileName = `${baseName}.glb`;
+
+  // 4) Native Save-Dialog, Fallback Download
+  if ('showSaveFilePicker' in window) {
+    try {
+      const fh = await window.showSaveFilePicker({
+        suggestedName: fileName,
+        types: [{ description: 'Binary glTF (.glb)', accept: { 'model/gltf-binary': ['.glb'] } }]
+      });
+      const w = await fh.createWritable(); await w.write(glbBlob); await w.close();
+      toast('GLB gespeichert');
+      return;
+    } catch {
+      // Nutzer abgebrochen -> Fallback Download
+    }
+  }
+  const url = URL.createObjectURL(glbBlob);
+  const a = document.createElement('a'); a.href = url; a.download = fileName; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  toast('Download gestartet');
+}
 
 
 
@@ -1492,6 +1568,11 @@ try {
         saveProject({saveAs:true});
       });
 
+      $('#btn-export-glb').addEventListener('click', ()=>{
+  closeMenu();
+  exportSelectedGLB();
+});
+
       $('#file-project').addEventListener('change', e=>{
         closeMenu();
         const f=e.target.files?.[0];
@@ -1534,6 +1615,7 @@ try {
       if(tcontrols?.dragging) return;
       const k=e.key.toLowerCase();
       if(k==='w') { tcontrols.setMode('translate'); updateToolButtons(); }
+      if (k==='e' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); exportSelectedGLB(); return; }
       else if(k==='e') { tcontrols.setMode('rotate'); updateToolButtons(); }
       else if(k==='r') { tcontrols.setMode('scale'); updateToolButtons(); }
       else if(k==='d') { e.preventDefault(); $('#btn-duplicate').click(); }
