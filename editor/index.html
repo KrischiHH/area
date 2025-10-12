@@ -49,6 +49,37 @@
     .btn:hover{border-color:var(--accent)}
     .btn:disabled,.toolbtn:disabled{opacity:.5;cursor:not-allowed}
 
+    /* Grundzustand: dezent, flach */
+.btn,.menubtn,.toolbtn{
+  box-shadow: var(--ring-1), var(--shadow-1);
+  transition: box-shadow .18s ease, transform .12s ease, background-color .18s ease, border-color .18s ease;
+  will-change: transform, box-shadow;
+}
+
+/* Hover: „hebt ab“ (mehr Tiefe + sanfte Glow-Kante) */
+.btn:hover,.menubtn:hover,.toolbtn:hover{
+  box-shadow: var(--ring-accent-2), var(--shadow-2);
+}
+
+/* Active (Mousedown): fühlbar gedrückt (inset) */
+.btn:active,.menubtn:active,.toolbtn:active{
+  transform: translateY(1px);
+  box-shadow: var(--shadow-press-1);
+}
+
+/* Fokus via Tastatur: klarer Ring (barrierefrei) */
+:where(.btn,.menubtn,.toolbtn):focus-visible{
+  outline: none;
+  box-shadow: var(--ring-accent-1), var(--shadow-2);
+}
+
+/* Disabled bleibt flach */
+.btn:disabled,.toolbtn:disabled,.menubtn:disabled{
+  box-shadow: var(--ring-1), var(--shadow-0);
+  transform: none;
+}
+
+
     .wrap{
       height:calc(100vh - 56px);
       display:grid;
@@ -69,6 +100,16 @@
     .tab{display:block;text-align:left;background:transparent;border:1px solid transparent;padding:6px 8px;border-radius:8px;cursor:pointer;color:var(--text);font-weight:700;min-width:0}
     .tab.active{border-color:var(--accent);box-shadow:inset 0 0 0 2px var(--accent)}
     .del{background:#0f1626;border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:8px;cursor:pointer}
+    .tab{
+  box-shadow: var(--ring-1);
+  transition: box-shadow .18s ease, background-color .18s ease;
+}
+.tab:hover{ box-shadow: var(--ring-accent-2); }
+.tab.active{
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent), var(--shadow-1);
+}
+
 
     .viewport{position:relative;overflow:hidden;min-height:0;height:100%}
     #stage{position:absolute;inset:0;width:100%;height:100%}
@@ -92,7 +133,15 @@
 
     .toolbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
     .toolbtn{background:#0f1626;border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:999px;cursor:pointer;font-weight:700}
-    .toolbtn.active{outline:2px solid var(--accent)}
+    .toolbtn.active{
+  outline: none;
+  box-shadow: var(--ring-accent-1), var(--shadow-2);
+}
+.toolbtn.active:hover{
+  /* leicht mehr Lift beim drüberfahren */
+  box-shadow: var(--ring-accent-1), var(--shadow-3);
+}
+
 
     .select,.input{background:#0f1420;border:1px solid var(--border);color:var(--text);padding:8px;border-radius:10px}
     .select option{background:#0f1420;color:var(--text)}
@@ -111,7 +160,8 @@
 }
 
 /* Panels minimal „schweben“ lassen */
-.panel{ box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+.panel{ box-shadow: var(--shadow-3); }
+.hint,.status-badge{ box-shadow: var(--shadow-2); } /* wirkt „glasiger“ */
 
 /* Scrollbars dezent */
 *{ scrollbar-width:thin; scrollbar-color: var(--border) transparent; }
@@ -938,6 +988,27 @@ async function publishToWorker({ workerBase, sceneId, sceneJson, glbBlob, publis
     g.quaternion.copy(t.quaternion);
     g.scale.copy(t.scale);
     g.position.add(new THREE.Vector3(0.25, 0, 0.25));
+
+    :root{
+  /* Hebung (outset) */
+  --shadow-0: none;
+  --shadow-1: 0 2px 6px rgba(0,0,0,.22);
+  --shadow-2: 0 6px 16px rgba(0,0,0,.28);
+  --shadow-3: 0 10px 24px rgba(0,0,0,.35);
+
+  /* Eingedrückt (inset) – „pressed“ */
+  --shadow-press-1:
+    inset 0 1px 1.5px rgba(255,255,255,.06),
+    inset 0 -8px 18px rgba(0,0,0,.45);
+  --shadow-press-2:
+    inset 0 0 0 2px var(--accent),
+    inset 0 10px 22px rgba(0,0,0,.55);
+
+  /* Konturringe (für Hover/Active) */
+  --ring-1: 0 0 0 1px var(--border) inset;
+  --ring-accent-1: 0 0 0 2px var(--accent) inset;
+  --ring-accent-2: 0 0 0 2px var(--accent2) inset;
+}
 
     // Neues Rec anlegen – root ist der tatsächlich geklonte Node (oder null bei Media)
     const rec = {
