@@ -416,22 +416,24 @@ async function exportRecToGLB(rec){
   return new Promise((resolve, reject)=>{
     try{
       const exporter = new GLTFExporter();
-      const node = rec.root || rec.group; // root enthält die eigentliche GLTF-Szene
+      const node = rec.root || rec.group;
       const options = {
         binary: true,
         animations: Array.isArray(rec.clips) ? rec.clips : [],
-        // optional:
         includeCustomExtensions: true,
-        // forceIndices: true,              // falls gewünscht
-        // forcePowerOfTwoTextures: false,  // falls gewünscht
+        onlyVisible: true,
+        truncateDrawRange: true,
+        forcePowerOfTwoTextures: false,
+        // Auf sinnvolle Max-Kante begrenzen (z.B. 2048, je nach Zielgeräteklasse)
+        maxTextureSize: 2048
       };
       exporter.parse(node, (result)=>{
-        // result ist ein ArrayBuffer (binary:true)
         resolve(new Blob([result], { type: 'model/gltf-binary' }));
       }, options);
     }catch(err){ reject(err); }
   });
 }
+
 
 // Liefert immer einen GLB-Blob – bei .gltf wird "on-the-fly" konvertiert.
 async function getGLBBlobFromRec(rec){
@@ -440,11 +442,11 @@ async function getGLBBlobFromRec(rec){
     const ab = await rec.file.arrayBuffer();
     return new Blob([ab], { type: 'model/gltf-binary' });
   }
-  if (isGLBSource(rec) && rec?.url) {
-    const r = await fetch(rec.url);
-    const b = await r.blob();
-    return new Blob([await b.arrayBuffer()], { type:'model/gltf-binary' });
-  }
+if (isGLBSource(rec) && rec?.url) {
+  const b = await (await fetch(rec.url)).blob();
+  // Falls der Server keinen Typ setzt, setzen wir ihn (optional):
+  return b.type ? b : new Blob([await b.arrayBuffer()], { type:'model/gltf-binary' });
+}
 
   // 2) Nicht-GLB (z.B. .gltf)? -> aus der bereits geladenen Scene exportieren
   return await exportRecToGLB(rec);
@@ -842,11 +844,30 @@ async function publishToWorker({ workerBase, sceneId, sceneJson, glbBlob, publis
           g.add(mesh); mesh.add(sound);
           const loader=new THREE.AudioLoader(); loader.load(src.media.src, buffer=>{ sound.setBuffer(buffer); sound.setRefDistance(1.5); sound.setDistanceModel('inverse'); sound.setLoop(!!src.media.loop); });
           g.userData.__media={kind:'audio', sound, loop:!!src.media.loop, repeats:src.media.repeats||1, count:0, src:src.media.src};
-        } else {
-          const clonedRoot = SkeletonUtils.clone(src.root);
-          g.add(clonedRoot);
-          prepareMaterialBases(g); updateMaterialLook();
-        }
+        // Im else-Zweig von duplicateSelected (3D-Objekte klonen):
+} else {
+  const clonedRoot = SkeletonUtils.clone(src.root || src.group);
+  g.add(clonedRoot);
+  prepareMaterialBases(g); updateMaterialLook();
+}
+
+// Beim Rec anlegen:
+const rec = {
+  id: uid(),
+  type: 'object',
+  name: g.name,
+  file: src.file || null,
+  url: null,
+  group: g,
+  root: clonedRoot,                  // <— statt children.find(...)
+  clips: (src.clips || []).slice(),
+  mixer: null,
+  actions: {},
+  hidden: false,
+  locked: false,
+  media: g.userData.__media || null
+};
+
 
         scene.add(g);
         const t=src.group;
@@ -1220,7 +1241,7 @@ async function publishToWorker({ workerBase, sceneId, sceneJson, glbBlob, publis
       rebuildList(); updateGroupButtons(); updateOutlineSelection(); updateMaterialLook(); toast('Projekt geladen');
     }
 
-    // Bookmarks & Exposure
+     // Bookmarks & Exposure
     const bookmarks=Array(5).fill(null);
     function saveBookmark(i){ bookmarks[i]={pos:camera.position.clone(),target:controls.target.clone(),fov:camera.fov}; toast(`Bookmark ${i+1} gespeichert`); }
     function recallBookmark(i){ const bm=bookmarks[i]; if(!bm){ toast(`Kein Bookmark auf ${i+1}`); return; } goCamera([bm.pos.x,bm.pos.y,bm.pos.z],[bm.target.x,bm.target.y,bm.target.z],bm.fov,350); toast(`Bookmark ${i+1} geladen`); }
@@ -1291,7 +1312,7 @@ async function publishToWorker({ workerBase, sceneId, sceneJson, glbBlob, publis
     : state.objects.find(o => o.type === 'object' && !o.media)) || null;
 
   const rec = pick3DRec(cand);
-  if (!rec) { toast('Kein 3D-Objekt (GLB) gefunden. Bitte ein Objekt auswählen.'); return; }
+  if (!rec) { toast('Kein 3D-Objekt gefunden. Bitte ein Objekt auswählen.'); return; }
 
    
   // 4) Animation & Play-Mode aus UI
@@ -1302,15 +1323,18 @@ async function publishToWorker({ workerBase, sceneId, sceneJson, glbBlob, publis
   }
   const playMode = $('#playModeSel')?.value || 'auto';
 
-  // 5) GLB beschaffen
-  let glbBlob;
-  try {
-    glbBlob = await getGLBBlobFromRec(rec);
-  } catch(e) {
-    console.error(e);
-    toast('GLB nicht gefunden/lesbar');
-    return;
-  }
+ // 5) GLB beschaffen + UI-Feedback
+let glbBlob;
+toast('Konvertiere zu GLB…');
+try {
+  glbBlob = await getGLBBlobFromRec(rec);
+  toast('GLB fertig, veröffentliche…');
+} catch (e) {
+  console.error(e);
+  toast('Konvertierung fehlgeschlagen: ' + (e?.message || ''));
+  return;
+}
+
 
   // 6) scene.json bauen
   const sceneJson = buildSceneJSON({
@@ -1332,14 +1356,6 @@ async function publishToWorker({ workerBase, sceneId, sceneJson, glbBlob, publis
   return null;
 }
 
-    // Erkennt .gltf (Datei, URL oder Data-URL)
-function isGLTFSource(rec){
-  const name = rec.file?.name || '';
-  const url  = rec.url || '';
-  return /\.gltf$/i.test(name)
-      || /\.gltf(\?|$)/i.test(url)
-      || /^data:.*(gltf\+json|application\/json)/i.test(url);
-}
 
   // 8) Publish -> Worker (R2)
   let result;
