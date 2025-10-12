@@ -827,58 +827,122 @@ async function publishToWorker({ workerBase, sceneId, sceneJson, glbBlob, publis
     $('#space-world').addEventListener('click', ()=>setSpace('world'));
 
     function duplicateSelected(){
-      const ids=[...state.selection]; if(!ids.length) return; const newIds=[];
-      ids.forEach(id=>{
-        const src=findRec(id); if(!src || src.type!=='object') return;
-        const g=new THREE.Group(); g.name=src.name+' (Kopie)';
-        if(src.media?.kind==='video'){
-          const vid = document.createElement('video'); vid.src = src.media.src; vid.loop=src.media.loop; vid.crossOrigin='anonymous'; vid.playsInline=true; vid.preload='auto';
-          const tex = new THREE.VideoTexture(vid); tex.colorSpace=THREE.SRGBColorSpace; tex.flipY=false;
-          const w=src.media.w||1.6, h=src.media.h||0.9;
-          const plane=new THREE.Mesh(new THREE.PlaneGeometry(w,h), new THREE.MeshBasicMaterial({map:tex, toneMapped:false}));
-          g.add(plane);
-          g.userData.__media={kind:'video', el:vid, tex, loop:!!src.media.loop, repeats:src.media.repeats||1, count:0, w, h, src:src.media.src};
-        } else if(src.media?.kind==='audio'){
-          const mesh=new THREE.Mesh(new THREE.SphereGeometry(0.08,16,16), new THREE.MeshStandardMaterial({color:0x66aaff, emissive:0x0a1e3a, roughness:0.3, metalness:0.1}));
-          const sound=new THREE.PositionalAudio(audioListener);
-          g.add(mesh); mesh.add(sound);
-          const loader=new THREE.AudioLoader(); loader.load(src.media.src, buffer=>{ sound.setBuffer(buffer); sound.setRefDistance(1.5); sound.setDistanceModel('inverse'); sound.setLoop(!!src.media.loop); });
-          g.userData.__media={kind:'audio', sound, loop:!!src.media.loop, repeats:src.media.repeats||1, count:0, src:src.media.src};
-        // Im else-Zweig von duplicateSelected (3D-Objekte klonen):
-} else {
-  const clonedRoot = SkeletonUtils.clone(src.root || src.group);
-  g.add(clonedRoot);
-  prepareMaterialBases(g); updateMaterialLook();
+  const ids = [...state.selection];
+  if (!ids.length) return;
+
+  const newIds = [];
+
+  ids.forEach(id=>{
+    const src = findRec(id);
+    if (!src || src.type !== 'object') return;
+
+    const g = new THREE.Group();
+    g.name = src.name + ' (Kopie)';
+
+    let clonedRoot = null;
+
+    if (src.media?.kind === 'video') {
+      const vid = document.createElement('video');
+      vid.src = src.media.src;
+      vid.loop = src.media.loop;
+      vid.crossOrigin = 'anonymous';
+      vid.playsInline = true;
+      vid.preload = 'auto';
+
+      const tex = new THREE.VideoTexture(vid);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.flipY = false;
+
+      const w = src.media.w || 1.6;
+      const h = src.media.h || 0.9;
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
+      g.add(plane);
+
+      g.userData.__media = {
+        kind: 'video',
+        el: vid, tex,
+        loop: !!src.media.loop,
+        repeats: src.media.repeats || 1,
+        count: 0,
+        w, h,
+        src: src.media.src
+      };
+
+    } else if (src.media?.kind === 'audio') {
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.08, 16, 16),
+        new THREE.MeshStandardMaterial({ color: 0x66aaff, emissive: 0x0a1e3a, roughness: 0.3, metalness: 0.1 })
+      );
+      const sound = new THREE.PositionalAudio(audioListener);
+      g.add(mesh);
+      mesh.add(sound);
+
+      // Re-use den globalen AudioLoader
+      audioLoader.load(src.media.src, buffer => {
+        sound.setBuffer(buffer);
+        sound.setRefDistance(1.5);
+        sound.setDistanceModel('inverse');
+        sound.setLoop(!!src.media.loop);
+      });
+
+      g.userData.__media = {
+        kind: 'audio',
+        sound,
+        loop: !!src.media.loop,
+        repeats: src.media.repeats || 1,
+        count: 0,
+        src: src.media.src
+      };
+
+    } else {
+      // 3D-Objekt klonen
+      clonedRoot = SkeletonUtils.clone(src.root || src.group);
+      g.add(clonedRoot);
+      prepareMaterialBases(g);
+      updateMaterialLook();
+    }
+
+    // In Szene einsetzen (leicht versetzt)
+    scene.add(g);
+    const t = src.group;
+    g.position.copy(t.position);
+    g.quaternion.copy(t.quaternion);
+    g.scale.copy(t.scale);
+    g.position.add(new THREE.Vector3(0.25, 0, 0.25));
+
+    // Neues Rec anlegen – root ist der tatsächlich geklonte Node (oder null bei Media)
+    const rec = {
+      id: uid(),
+      type: 'object',
+      name: g.name,
+      file: src.file || null,
+      url: null,
+      group: g,
+      root: clonedRoot,
+      clips: (src.clips || []).slice(),
+      mixer: null,
+      actions: {},
+      hidden: false,
+      locked: false,
+      media: g.userData.__media || null
+    };
+
+    state.objects.push(rec);
+    addPickProxy(rec);
+    newIds.push(rec.id);
+  });
+
+  if (newIds.length) {
+    state.selection = new Set(newIds);
+    state.selectedId = newIds[newIds.length - 1];
+    tcontrols.attach(findRec(state.selectedId)?.group || null);
+    rebuildList();
+    updateOutlineSelection();
+    toast('Dupliziert');
+    syncMediaUI();
+  }
 }
 
-// Beim Rec anlegen:
-const rec = {
-  id: uid(),
-  type: 'object',
-  name: g.name,
-  file: src.file || null,
-  url: null,
-  group: g,
-  root: clonedRoot,                  // <— statt children.find(...)
-  clips: (src.clips || []).slice(),
-  mixer: null,
-  actions: {},
-  hidden: false,
-  locked: false,
-  media: g.userData.__media || null
-};
-
-
-        scene.add(g);
-        const t=src.group;
-        g.position.copy(t.position); g.quaternion.copy(t.quaternion); g.scale.copy(t.scale);
-        g.position.add(new THREE.Vector3(0.25,0,0.25));
-        const rec={ id:uid(), type:'object', name:g.name, file:src.file||null, url:null, group:g, root:(src.root? g.children.find(c=>c!==undefined):null), clips:(src.clips||[]).slice(), mixer:null, actions:{}, hidden:false, locked:false, media:g.userData.__media||null };
-        state.objects.push(rec); addPickProxy(rec); newIds.push(rec.id);
-      });
-      if(newIds.length){ state.selection=new Set(newIds); state.selectedId=newIds[newIds.length-1]; tcontrols.attach(findRec(state.selectedId)?.group||null); rebuildList(); updateOutlineSelection(); toast('Dupliziert'); syncMediaUI(); }
-    }
-    $('#btn-duplicate').addEventListener('click', duplicateSelected);
 
     function dropToFloor(){
       const ids=[...state.selection]; if(!ids.length) return;
